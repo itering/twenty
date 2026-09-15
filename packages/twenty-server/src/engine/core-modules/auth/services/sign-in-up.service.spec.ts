@@ -18,6 +18,7 @@ const mockPartialUserPayload: SignInUpNewUserPayload = {
 };
 
 type MockConfigurationValues = {
+  MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY: number;
   IS_MULTIWORKSPACE_ENABLED: boolean;
   IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS: boolean;
   SERVER_URL: string;
@@ -36,6 +37,7 @@ const createSignInUpServiceForTests = () => {
   };
 
   const mockConfigurationValues: MockConfigurationValues = {
+    MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY: 999,
     IS_MULTIWORKSPACE_ENABLED: true,
     IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS: false,
     SERVER_URL: 'http://localhost:3000',

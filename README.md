@@ -1,3 +1,31 @@
+# Itering CRM
+
+Maintained from [Twenty `twenty/v2.30.0`](https://github.com/twentyhq/twenty/tree/531361c9a73b5eda6223fc8deae7d5b3fe144fec).
+
+Itering modification, 2026-09-15: the workspace creation limit defaults to **999** per shared database and can be set with the environment-only `MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY` variable. Use a positive integer and restart all server and worker processes after changing it. Invalid values fail configuration validation. Enterprise license verification and other feature gates remain unchanged. This limit is not a tested capacity guarantee.
+
+The original [LICENSE](LICENSE) remains in effect, including its commercial-file exceptions. The source for each published image is the commit recorded in its `org.opencontainers.image.revision` label, available from this public repository. Deployments must offer their remote users access to the corresponding source. Customer data and deployment secrets are not part of this repository.
+
+## Images and CI
+
+- Registry: `ghcr.io/itering/twenty`.
+- `main`: latest passing build on this repository's `main` branch.
+- `sha-<full commit>`: source-pinned multi-platform image.
+- `v*-itering.*` tags: versioned releases.
+- Server and worker use the same image; worker command: `yarn worker:prod`.
+- CI builds native `linux/amd64` and `linux/arm64` images from the full source using the upstream Dockerfile, runs the existing authentication tests and checks the compiled environment configuration and workspace boundaries on each platform, and publishes the combined manifest only after both checks pass.
+- Pull requests build and check images without publishing. Upstream cloud deployment, preview, translation-sync, and notification workflows are not run here.
+
+Build locally:
+
+```sh
+docker build --target twenty --build-arg APP_VERSION=2.30.0 -f packages/twenty-docker/twenty/Dockerfile -t itering-twenty:local .
+```
+
+For upgrades, review upstream changes and licenses, update the baseline, and run database upgrade validation before deployment. Database migration and cron registration remain deployment responsibilities; CI does not access any running CRM database.
+
+---
+
 <p align="center">
   <a href="https://www.twenty.com">
     <img src="./packages/twenty-website/public/images/core/logo.svg" width="100px" alt="Twenty logo" />

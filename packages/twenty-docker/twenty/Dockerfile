@@ -51,6 +51,10 @@ RUN npx nx run twenty-server:lingui:extract && \
 
 RUN npx nx run twenty-server:build
 
+# Verify the modified authentication path before pruning development dependencies.
+RUN npx jest --config packages/twenty-server/jest.config.mjs --runInBand --runTestsByPath \
+    packages/twenty-server/src/engine/core-modules/auth/services/sign-in-up.service.spec.ts
+
 # Clean server build output (type declarations and compiled tests are not needed at runtime;
 # source maps are kept because twenty-infra extracts them from the image for Sentry uploads)
 RUN find /app/packages/twenty-server/dist -name '*.d.ts' -delete \
@@ -100,6 +104,7 @@ RUN apk add --no-cache \
 COPY ./packages/twenty-docker/twenty/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 WORKDIR /app/packages/twenty-server
+COPY LICENSE /usr/share/licenses/twenty/LICENSE
 
 ARG APP_VERSION
 ENV APP_VERSION=$APP_VERSION
@@ -129,7 +134,7 @@ COPY --chown=1000 --from=twenty-server-build /app/packages/twenty-emails/dist /a
 COPY --chown=1000 --from=twenty-server-build /app/packages/twenty-client-sdk/package.json /app/packages/twenty-client-sdk/
 COPY --chown=1000 --from=twenty-server-build /app/packages/twenty-client-sdk/dist /app/packages/twenty-client-sdk/dist
 
-LABEL org.opencontainers.image.source=https://github.com/twentyhq/twenty
+LABEL org.opencontainers.image.source=https://github.com/itering/twenty
 LABEL org.opencontainers.image.description="Twenty server image (no frontend)."
 
 # Remove unused, unpatchable components the scanner flags (none are executed at
@@ -294,7 +299,7 @@ ENV PG_DATABASE_URL=postgres://twenty:twenty@localhost:5432/default \
 EXPOSE 2020
 VOLUME ["/data/postgres", "/app/packages/twenty-server/.local-storage"]
 
-LABEL org.opencontainers.image.source=https://github.com/twentyhq/twenty
+LABEL org.opencontainers.image.source=https://github.com/itering/twenty
 LABEL org.opencontainers.image.description="All-in-one Twenty image for local development and SDK usage. Includes PostgreSQL, Redis, server, and worker."
 
 ENTRYPOINT ["/init"]

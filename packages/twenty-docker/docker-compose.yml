@@ -2,7 +2,7 @@ name: twenty
 
 services:
   server:
-    image: twentycrm/twenty:${TAG:-latest}
+    image: ghcr.io/itering/twenty:${TAG:-main}
     volumes:
       - server-local-data:/app/packages/twenty-server/.local-storage
     ports:
@@ -11,6 +11,7 @@ services:
       NODE_PORT: 3000
       PG_DATABASE_URL: postgres://${PG_DATABASE_USER:-postgres}:${PG_DATABASE_PASSWORD:-postgres}@${PG_DATABASE_HOST:-db}:${PG_DATABASE_PORT:-5432}/default
       SERVER_URL: ${SERVER_URL}
+      MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY: ${MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY:-999}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       DISABLE_DB_MIGRATIONS: ${DISABLE_DB_MIGRATIONS}
       DISABLE_CRON_JOBS_REGISTRATION: ${DISABLE_CRON_JOBS_REGISTRATION}
@@ -59,13 +60,14 @@ services:
     restart: always
 
   worker:
-    image: twentycrm/twenty:${TAG:-latest}
+    image: ghcr.io/itering/twenty:${TAG:-main}
     volumes:
       - server-local-data:/app/packages/twenty-server/.local-storage
     command: ["yarn", "worker:prod"]
     environment:
       PG_DATABASE_URL: postgres://${PG_DATABASE_USER:-postgres}:${PG_DATABASE_PASSWORD:-postgres}@${PG_DATABASE_HOST:-db}:${PG_DATABASE_PORT:-5432}/default
       SERVER_URL: ${SERVER_URL}
+      MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY: ${MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY:-999}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       DISABLE_DB_MIGRATIONS: "true" # it already runs on the server
       DISABLE_CRON_JOBS_REGISTRATION: "true" # it already runs on the server

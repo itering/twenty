@@ -11,6 +11,8 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Max,
+  Min,
   ValidateIf,
   type ValidationError,
   validateSync,
@@ -47,6 +49,7 @@ import { CastToUpperSnakeCase } from 'src/engine/core-modules/twenty-config/deco
 import { ConfigVariablesMetadata } from 'src/engine/core-modules/twenty-config/decorators/config-variables-metadata.decorator';
 import { IsAWSRegion } from 'src/engine/core-modules/twenty-config/decorators/is-aws-region.decorator';
 import { DEFAULT_WORKSPACE_AUTO_LOGIN_WINDOW } from 'src/engine/core-modules/auth/constants/default-workspace-auto-login-window.constant';
+import { MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY } from 'src/engine/core-modules/auth/constants/max-workspaces-without-enterprise-key.constants';
 import { IsNonNegativeDuration } from 'src/engine/core-modules/twenty-config/decorators/is-non-negative-duration.decorator';
 import { IsPositiveDuration } from 'src/engine/core-modules/twenty-config/decorators/is-positive-duration.decorator';
 import { IsOptionalOrEmptyString } from 'src/engine/core-modules/twenty-config/decorators/is-optional-or-empty-string.decorator';
@@ -552,6 +555,21 @@ export class ConfigVariables {
   })
   @IsOptional()
   IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS = true;
+
+  // Modified by Itering on 2026-09-15: operators configure the shared workspace limit.
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.ADVANCED_SETTINGS,
+    description:
+      'Maximum workspaces in the shared database without an enterprise key. Positive integer; restart server and worker after changing.',
+    type: ConfigVariableType.NUMBER,
+    isEnvOnly: true,
+  })
+  @CastToPositiveNumber()
+  @IsDefined()
+  @IsInt()
+  @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
+  MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY = MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY;
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.ADVANCED_SETTINGS,

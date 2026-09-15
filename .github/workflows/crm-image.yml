@@ -1,0 +1,109 @@
+name: CRM image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*-itering.*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crm-image-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  IMAGE: ghcr.io/itering/twenty
+
+jobs:
+  build:
+    name: Build and verify ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 2
+      - name: Validate source diff
+        run: git diff --check HEAD^ HEAD
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - name: Build CRM from source
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: packages/twenty-docker/twenty/Dockerfile
+          target: twenty
+          platforms: ${{ matrix.platform }}
+          load: true
+          tags: ${{ env.IMAGE }}:sha-${{ github.sha }}-${{ matrix.arch }}
+          build-args: APP_VERSION=2.30.0
+          labels: |
+            org.opencontainers.image.source=https://github.com/itering/twenty
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=2.30.0-itering
+          cache-from: type=gha,scope=crm-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=crm-${{ matrix.arch }}
+      - name: Verify compiled workspace guard
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          docker run --rm --network none --entrypoint node \
+            --mount "type=bind,src=$PWD/.github/scripts/verify-workspace-limit.cjs,dst=/tmp/verify-workspace-limit.cjs,readonly" \
+            "$IMAGE:sha-$GITHUB_SHA-$ARCH" /tmp/verify-workspace-limit.cjs
+      - name: Sign in to GHCR
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish verified platform image
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: docker push "$IMAGE:sha-$GITHUB_SHA-$ARCH"
+
+  publish:
+    name: Publish multi-platform manifest
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish source-pinned and channel tags
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            channel="$GITHUB_REF_NAME"
+          else
+            channel=main
+          fi
+          docker buildx imagetools create \
+            --tag "$IMAGE:sha-$GITHUB_SHA" \
+            --tag "$IMAGE:$channel" \
+            "$IMAGE:sha-$GITHUB_SHA-amd64" \
+            "$IMAGE:sha-$GITHUB_SHA-arm64"
+          docker buildx imagetools inspect "$IMAGE:sha-$GITHUB_SHA"
