@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 
-import { plainToClass } from 'class-transformer';
+import { plainToClass, Type } from 'class-transformer';
 import {
   IsDateString,
   IsDefined,
@@ -564,8 +564,7 @@ export class ConfigVariables {
     type: ConfigVariableType.NUMBER,
     isEnvOnly: true,
   })
-  @CastToPositiveNumber()
-  @IsDefined()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(Number.MAX_SAFE_INTEGER)
