@@ -1,8 +1,12 @@
 import { Field, ObjectType } from '@nestjs/graphql';
 
-import { type ConnectionProviderType } from 'twenty-shared/application';
+import {
+  type ConnectionProviderScope,
+  type ConnectionProviderType,
+} from 'twenty-shared/application';
 
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
+import { ConnectionProviderScopeEnum } from 'src/engine/core-modules/application/connection-provider/dtos/connection-provider-scope.enum';
 
 @ObjectType('ApplicationConnectionProviderOAuthConfig')
 export class ApplicationConnectionProviderOAuthConfigDTO {
@@ -34,6 +38,11 @@ export class ApplicationConnectionProviderDTO {
 
   @Field()
   displayName: string;
+
+  @Field(() => ConnectionProviderScopeEnum)
+  scope: ConnectionProviderScope;
+
+  logo: string | null;
 
   @Field(() => ApplicationConnectionProviderOAuthConfigDTO, { nullable: true })
   oauth: ApplicationConnectionProviderOAuthConfigDTO | null;

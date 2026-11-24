@@ -2,6 +2,7 @@ import { type FlatApiKey } from 'src/engine/core-modules/api-key/types/flat-api-
 import { type FlatApplication } from 'src/engine/core-modules/application/types/flat-application.type';
 import { type FlatAuthContextUser } from 'src/engine/core-modules/auth/types/flat-auth-context-user.type';
 import { type JwtTokenTypeEnum } from 'src/engine/core-modules/auth/types/jwt-token-type.enum';
+import { type ImpersonationLevel } from 'src/engine/core-modules/impersonation/types/impersonation-level.type';
 import { type FlatUserWorkspace } from 'src/engine/core-modules/user-workspace/types/flat-user-workspace.type';
 import { type FlatWorkspace } from 'src/engine/core-modules/workspace/types/flat-workspace.type';
 import { type AuthProviderEnum } from 'src/engine/core-modules/workspace/types/workspace.type';
@@ -14,15 +15,16 @@ export type RawAuthContext = {
   workspaceMember?: WorkspaceMemberWorkspaceEntity;
   workspace?: FlatWorkspace;
   application?: FlatApplication | null | undefined;
+  agentId?: string;
   userWorkspaceId?: string;
   userWorkspace?: FlatUserWorkspace;
   authProvider?: AuthProviderEnum;
   impersonationContext?: {
     impersonatorUserWorkspaceId?: string;
     impersonatedUserWorkspaceId?: string;
+    level: ImpersonationLevel;
   };
   tokenType?: JwtTokenTypeEnum;
-  // When the user last proved their identity. Only sessions can express this:
-  // a JWT's iat is its renewal time, not the moment the user authenticated.
+  // Sessions only: a JWT's iat is its renewal time, not when the user authenticated
   authenticatedAt?: Date;
 };

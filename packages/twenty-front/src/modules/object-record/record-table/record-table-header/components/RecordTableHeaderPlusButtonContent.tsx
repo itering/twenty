@@ -1,24 +1,28 @@
-import { useCallback, useState } from 'react';
-import { useLocation } from 'react-router-dom';
-
+import { findCanonicalRecordField } from '@/object-record/record-field/utils/findCanonicalRecordField';
+import { RecordTableLookupTargetFieldSelectMenu } from '@/object-record/record-column-lookup/components/RecordTableLookupTargetFieldSelectMenu';
+import { useCanAddRecordTableLookupColumns } from '@/object-record/record-table/hooks/useCanAddRecordTableLookupColumns';
+import { isPlainManyToOneRelationField } from '@/object-record/utils/isPlainManyToOneRelationField';
 import { useActiveFieldMetadataItems } from '@/object-metadata/hooks/useActiveFieldMetadataItems';
 import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
 import { useChangeRecordFieldVisibility } from '@/object-record/record-field/hooks/useChangeRecordFieldVisibility';
 import { type FieldMetadata } from '@/object-record/record-field/ui/types/FieldMetadata';
 import { useRecordTableContextOrThrow } from '@/object-record/record-table/contexts/RecordTableContext';
 import { type ColumnDefinition } from '@/object-record/record-table/types/ColumnDefinition';
-import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
-import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
-import { DropdownMenuSearchInput } from '@/ui/layout/dropdown/components/DropdownMenuSearchInput';
-import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownMenuSeparator';
-import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
+import { SelectOptionIcon } from '@/ui/input/components/SelectOptionIcon';
 import { navigationMemorizedUrlState } from '@/ui/navigation/states/navigationMemorizedUrlState';
 import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
 import { useLingui } from '@lingui/react/macro';
+import { useCallback, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { SettingsPath } from 'twenty-shared/types';
-import { getSettingsPath } from 'twenty-shared/utils';
-import { IconSettings, useIcons } from 'twenty-ui/icon';
-import { MenuItem, UndecoratedLink } from 'twenty-ui/navigation';
+import {
+  getSettingsPath,
+  isDefined,
+  isNonEmptyArray,
+} from 'twenty-shared/utils';
+import { Dropdown } from 'twenty-ui/components/navigation';
+import { IconSettings } from 'twenty-ui/icon';
+import { useIcons } from 'twenty-ui/icon/provider';
 
 export const RecordTableHeaderPlusButtonContent = () => {
   const { t } = useLingui();
@@ -27,21 +31,18 @@ export const RecordTableHeaderPlusButtonContent = () => {
   const { objectMetadataItem, recordTableId, visibleRecordFields } =
     useRecordTableContextOrThrow();
 
-  const { closeDropdown } = useCloseDropdown();
-
   const { getIcon } = useIcons();
 
-  const { changeRecordFieldVisibility } =
+  const { changeRecordFieldVisibility, addLookupRecordField } =
     useChangeRecordFieldVisibility(recordTableId);
 
   const handleAddColumn = useCallback(
     async (
       column: Pick<ColumnDefinition<FieldMetadata>, 'fieldMetadataId'>,
     ) => {
-      closeDropdown();
       await changeRecordFieldVisibility({ ...column, isVisible: true });
     },
-    [changeRecordFieldVisibility, closeDropdown],
+    [changeRecordFieldVisibility],
   );
 
   const location = useLocation();
@@ -53,12 +54,27 @@ export const RecordTableHeaderPlusButtonContent = () => {
     objectMetadataItem,
   });
 
+  const canAddLookupColumns = useCanAddRecordTableLookupColumns();
+
+  const isFieldVisible = (fieldMetadataItem: FieldMetadataItem) =>
+    isDefined(
+      findCanonicalRecordField({
+        recordFields: visibleRecordFields,
+        fieldMetadataItemId: fieldMetadataItem.id,
+      }),
+    );
+
+  // A many-to-one relation stays listed once shown, to reach its lookup columns
+  const isLookupRelation = (fieldMetadataItem: FieldMetadataItem) =>
+    canAddLookupColumns && isPlainManyToOneRelationField(fieldMetadataItem);
+
   const availableFieldMetadataItemsToShow = activeFieldMetadataItems.filter(
-    (fieldMetadataItemToFilter) =>
-      !visibleRecordFields
-        .map((recordField) => recordField.fieldMetadataItemId)
-        .includes(fieldMetadataItemToFilter.id),
+    (fieldMetadataItem) =>
+      !isFieldVisible(fieldMetadataItem) || isLookupRelation(fieldMetadataItem),
   );
+
+  const lookupRelationFieldMetadataItems =
+    availableFieldMetadataItemsToShow.filter(isLookupRelation);
 
   const filteredFieldMetadataItems = availableFieldMetadataItemsToShow.filter(
     (fieldMetadataItem) => {
@@ -76,59 +92,112 @@ export const RecordTableHeaderPlusButtonContent = () => {
     });
   };
 
-  const hasAvailableFields = availableFieldMetadataItemsToShow.length > 0;
+  const hasAvailableFields = isNonEmptyArray(availableFieldMetadataItemsToShow);
 
   return (
-    <DropdownContent>
-      {hasAvailableFields && (
-        <>
-          <DropdownMenuSearchInput
-            autoFocus
-            value={searchInput}
-            placeholder={t`Search fields`}
-            onChange={(event) => setSearchInput(event.target.value)}
-          />
-          <DropdownMenuSeparator />
-        </>
-      )}
-      <DropdownMenuItemsContainer>
-        {filteredFieldMetadataItems.length > 0 ? (
-          filteredFieldMetadataItems.map((fieldMetadataItem) => (
-            <MenuItem
-              key={fieldMetadataItem.id}
-              onClick={() =>
-                handleFieldMetadataItemMenuItemClick(fieldMetadataItem)
-              }
-              LeftIcon={getIcon(fieldMetadataItem.icon)}
-              text={fieldMetadataItem.label}
+    <>
+      <Dropdown.Page id="root">
+        {hasAvailableFields && (
+          <>
+            <Dropdown.Search
+              value={searchInput}
+              placeholder={t`Search fields`}
+              aria-label={t`Search fields`}
+              onValueChange={setSearchInput}
             />
-          ))
-        ) : (
-          <MenuItem
-            disabled
-            accent="placeholder"
-            text={
-              hasAvailableFields
-                ? t`No results`
-                : t`All fields are already visible`
-            }
-          />
+            <Dropdown.Separator />
+          </>
         )}
-      </DropdownMenuItemsContainer>
-      <DropdownMenuSeparator />
-      <DropdownMenuItemsContainer scrollable={false}>
-        <UndecoratedLink
-          fullWidth
-          to={getSettingsPath(SettingsPath.ObjectDetail, {
-            objectNamePlural: objectMetadataItem.namePlural,
-          })}
-          onClick={() => {
-            setNavigationMemorizedUrl(location.pathname + location.search);
-          }}
+        <Dropdown.Section scrollable>
+          {isNonEmptyArray(filteredFieldMetadataItems) ? (
+            filteredFieldMetadataItems.map((fieldMetadataItem) => {
+              const startIcon = (
+                <SelectOptionIcon Icon={getIcon(fieldMetadataItem.icon)} />
+              );
+
+              return isLookupRelation(fieldMetadataItem) ? (
+                <Dropdown.ActionItem
+                  key={fieldMetadataItem.id}
+                  page={fieldMetadataItem.id}
+                  startIcon={startIcon}
+                >
+                  {fieldMetadataItem.label}
+                </Dropdown.ActionItem>
+              ) : (
+                <Dropdown.OptionItem
+                  key={fieldMetadataItem.id}
+                  onSelect={() =>
+                    handleFieldMetadataItemMenuItemClick(fieldMetadataItem)
+                  }
+                  startIcon={startIcon}
+                >
+                  {fieldMetadataItem.label}
+                </Dropdown.OptionItem>
+              );
+            })
+          ) : (
+            <Dropdown.Empty>
+              {hasAvailableFields
+                ? t`No results`
+                : t`All fields are already visible`}
+            </Dropdown.Empty>
+          )}
+        </Dropdown.Section>
+        <Dropdown.Separator />
+        <Dropdown.Section scrollable={false}>
+          <Dropdown.ActionItem
+            render={
+              <Link
+                to={getSettingsPath(SettingsPath.ObjectDetail, {
+                  objectNamePlural: objectMetadataItem.namePlural,
+                })}
+              />
+            }
+            onClick={() => {
+              setNavigationMemorizedUrl(location.pathname + location.search);
+            }}
+            startIcon={<IconSettings />}
+          >{t`Customize fields`}</Dropdown.ActionItem>
+        </Dropdown.Section>
+      </Dropdown.Page>
+      {lookupRelationFieldMetadataItems.map((relationFieldMetadataItem) => (
+        <Dropdown.Page
+          key={relationFieldMetadataItem.id}
+          id={relationFieldMetadataItem.id}
         >
-          <MenuItem LeftIcon={IconSettings} text={t`Customize fields`} />
-        </UndecoratedLink>
-      </DropdownMenuItemsContainer>
-    </DropdownContent>
+          <RecordTableLookupTargetFieldSelectMenu
+            relationFieldMetadataItem={relationFieldMetadataItem}
+            onSelect={(lookupTargetFieldMetadataItem) =>
+              addLookupRecordField({
+                fieldMetadataId: relationFieldMetadataItem.id,
+                relationTargetFieldMetadataId: lookupTargetFieldMetadataItem.id,
+              })
+            }
+          >
+            {!isFieldVisible(relationFieldMetadataItem) && (
+              <>
+                <Dropdown.Section scrollable={false}>
+                  <Dropdown.ActionItem
+                    onClick={() =>
+                      handleFieldMetadataItemMenuItemClick(
+                        relationFieldMetadataItem,
+                      )
+                    }
+                    startIcon={
+                      <SelectOptionIcon
+                        Icon={getIcon(relationFieldMetadataItem.icon)}
+                      />
+                    }
+                  >
+                    {relationFieldMetadataItem.label}
+                  </Dropdown.ActionItem>
+                </Dropdown.Section>
+                <Dropdown.Separator />
+              </>
+            )}
+          </RecordTableLookupTargetFieldSelectMenu>
+        </Dropdown.Page>
+      ))}
+    </>
   );
 };

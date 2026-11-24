@@ -2,10 +2,9 @@ import { UseFilters, UseGuards } from '@nestjs/common';
 import { Args, Mutation, Query } from '@nestjs/graphql';
 
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { AuthUserWorkspaceId } from 'src/engine/decorators/auth/auth-user-workspace-id.decorator';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
 import { MetadataResolver } from 'src/engine/api/graphql/graphql-config/decorators/metadata-resolver.decorator';
-import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
-import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
 import { CreateViewGroupInput } from 'src/engine/metadata-modules/view-group/dtos/inputs/create-view-group.input';
 import { DeleteViewGroupInput } from 'src/engine/metadata-modules/view-group/dtos/inputs/delete-view-group.input';
 import { DestroyViewGroupInput } from 'src/engine/metadata-modules/view-group/dtos/inputs/destroy-view-group.input';
@@ -13,42 +12,56 @@ import { UpdateViewGroupInput } from 'src/engine/metadata-modules/view-group/dto
 import { ViewGroupDTO } from 'src/engine/metadata-modules/view-group/dtos/view-group.dto';
 import { ViewGroupService } from 'src/engine/metadata-modules/view-group/services/view-group.service';
 import { ViewGroupGraphqlApiExceptionFilter } from 'src/engine/metadata-modules/view-group/utils/view-group-graphql-api-exception.filter';
-import { CreateViewGroupPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/create-view-group-permission.guard';
-import { DeleteViewGroupPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/delete-view-group-permission.guard';
-import { DestroyViewGroupPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/destroy-view-group-permission.guard';
-import { UpdateViewGroupPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/update-view-group-permission.guard';
+import { CreateViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view/guards/create-view-child-entity-permission.guard';
+import { ViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view/guards/view-child-entity-permission.guard';
+import { AuthGraphqlApiExceptionFilter } from 'src/engine/core-modules/auth/filters/auth-graphql-api-exception.filter';
+import { VIEW_GROUP_ACCESS_POLICY } from 'src/engine/metadata-modules/view-group/constants/view-group-access-policy.constant';
+import { AccessPolicyGuard } from 'src/engine/guards/access-policy.guard';
 
 @MetadataResolver(() => ViewGroupDTO)
-@UseFilters(ViewGroupGraphqlApiExceptionFilter)
-@UseGuards(WorkspaceAuthGuard)
+@UseFilters(ViewGroupGraphqlApiExceptionFilter, AuthGraphqlApiExceptionFilter)
+@UseGuards(AccessPolicyGuard(VIEW_GROUP_ACCESS_POLICY))
 export class ViewGroupResolver {
   constructor(private readonly viewGroupService: ViewGroupService) {}
 
   @Query(() => [ViewGroupDTO])
-  @UseGuards(NoPermissionGuard)
   async getViewGroups(
     @AuthWorkspace() workspace: WorkspaceEntity,
+    @AuthUserWorkspaceId({ allowUndefined: true })
+    userWorkspaceId: string | undefined,
     @Args('viewId', { type: () => String, nullable: true })
     viewId?: string,
   ): Promise<ViewGroupDTO[]> {
     if (viewId) {
-      return this.viewGroupService.findByViewId(workspace.id, viewId);
+      return this.viewGroupService.findByViewId({
+        workspaceId: workspace.id,
+        viewId,
+        userWorkspaceId,
+      });
     }
 
-    return this.viewGroupService.findByWorkspaceId(workspace.id);
+    return this.viewGroupService.findByWorkspaceId({
+      workspaceId: workspace.id,
+      userWorkspaceId,
+    });
   }
 
   @Query(() => ViewGroupDTO, { nullable: true })
-  @UseGuards(NoPermissionGuard)
   async getViewGroup(
     @Args('id', { type: () => String }) id: string,
     @AuthWorkspace() workspace: WorkspaceEntity,
-  ): Promise<ViewGroupDTO | null> {
-    return this.viewGroupService.findById(id, workspace.id);
+    @AuthUserWorkspaceId({ allowUndefined: true })
+    userWorkspaceId: string | undefined,
+  ): Promise<ViewGroupDTO> {
+    return this.viewGroupService.findByIdOrThrow({
+      id,
+      workspaceId: workspace.id,
+      userWorkspaceId,
+    });
   }
 
   @Mutation(() => ViewGroupDTO)
-  @UseGuards(CreateViewGroupPermissionGuard)
+  @UseGuards(CreateViewChildEntityPermissionGuard)
   async createViewGroup(
     @Args('input') createViewGroupInput: CreateViewGroupInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
@@ -60,7 +73,7 @@ export class ViewGroupResolver {
   }
 
   @Mutation(() => [ViewGroupDTO])
-  @UseGuards(CreateViewGroupPermissionGuard)
+  @UseGuards(CreateViewChildEntityPermissionGuard)
   async createManyViewGroups(
     @Args('inputs', { type: () => [CreateViewGroupInput] })
     createViewGroupInputs: CreateViewGroupInput[],
@@ -73,7 +86,7 @@ export class ViewGroupResolver {
   }
 
   @Mutation(() => ViewGroupDTO)
-  @UseGuards(UpdateViewGroupPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewGroup'))
   async updateViewGroup(
     @Args('input') updateViewGroupInput: UpdateViewGroupInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
@@ -85,7 +98,7 @@ export class ViewGroupResolver {
   }
 
   @Mutation(() => [ViewGroupDTO])
-  @UseGuards(UpdateViewGroupPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewGroup'))
   async updateManyViewGroups(
     @Args('inputs', { type: () => [UpdateViewGroupInput] })
     updateViewGroupInputs: UpdateViewGroupInput[],
@@ -98,7 +111,7 @@ export class ViewGroupResolver {
   }
 
   @Mutation(() => ViewGroupDTO)
-  @UseGuards(DeleteViewGroupPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewGroup'))
   async deleteViewGroup(
     @Args('input') deleteViewGroupInput: DeleteViewGroupInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
@@ -110,7 +123,7 @@ export class ViewGroupResolver {
   }
 
   @Mutation(() => ViewGroupDTO)
-  @UseGuards(DestroyViewGroupPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewGroup'))
   async destroyViewGroup(
     @Args('input') destroyViewGroupInput: DestroyViewGroupInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,

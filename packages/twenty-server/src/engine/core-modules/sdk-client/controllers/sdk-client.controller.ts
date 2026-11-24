@@ -4,6 +4,7 @@ import {
   NotFoundException,
   Param,
   Res,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
 
@@ -11,6 +12,7 @@ import { Response } from 'express';
 import { ApiPath } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
+import { ApplicationRestApiExceptionFilter } from 'src/engine/core-modules/application/application-rest-api-exception.filter';
 import {
   ALLOWED_SDK_MODULES,
   type SdkModuleName,
@@ -20,15 +22,35 @@ import {
   SDK_CLIENT_MODULE_NO_STORE_CACHE_CONTROL,
 } from 'src/engine/core-modules/sdk-client/constants/sdk-client-module-cache-control';
 import { SdkClientArchiveService } from 'src/engine/core-modules/sdk-client/sdk-client-archive.service';
+import { buildServedSdkClientCoreChecksum } from 'src/engine/core-modules/sdk-client/utils/build-served-sdk-client-core-checksum.util';
 import { getInstalledSdkMetadataModule } from 'src/engine/core-modules/sdk-client/utils/get-installed-sdk-metadata-module.util';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { ApplicationTargetParam } from 'src/engine/decorators/auth/application-target-param.decorator';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
-import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
-import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
+import { AllowSuspendedWorkspace } from 'src/engine/decorators/auth/allow-suspended-workspace.decorator';
 import { WorkspaceCacheService } from 'src/engine/workspace-cache/services/workspace-cache.service';
+import { ApplicationTargetGuard } from 'src/engine/guards/application-target.guard';
+import { AccessPolicyGuard } from 'src/engine/guards/access-policy.guard';
 
 @Controller(`${ApiPath.Rest}/sdk-client`)
-@UseGuards(WorkspaceAuthGuard)
+@AllowSuspendedWorkspace()
+@UseGuards(
+  AccessPolicyGuard({
+    authPrincipals: {
+      userSession: {
+        standard: true,
+        impersonated: true,
+        playground: true,
+        workspaceAgnostic: false,
+      },
+      apiKey: true,
+      oauthClient: true,
+      application: true,
+    },
+    requiredPermissionFlags: [],
+  }),
+)
+@UseFilters(ApplicationRestApiExceptionFilter)
 export class SdkClientController {
   constructor(
     private readonly workspaceCacheService: WorkspaceCacheService,
@@ -36,7 +58,6 @@ export class SdkClientController {
   ) {}
 
   @Get(['metadata', 'metadata/:checksum'])
-  @UseGuards(NoPermissionGuard)
   async getInstanceSdkMetadataModule(
     @Res() res: Response,
     @Param('checksum') checksum?: string,
@@ -53,10 +74,14 @@ export class SdkClientController {
   }
 
   @Get([':applicationId/:moduleName', ':applicationId/:moduleName/:checksum'])
-  @UseGuards(NoPermissionGuard)
+  @UseGuards(ApplicationTargetGuard)
   async getSdkModule(
     @Res() res: Response,
-    @Param('applicationId') applicationId: string,
+    @ApplicationTargetParam('applicationId', {
+      kind: 'applicationId',
+      requireApplicationRegistrationOwnership: false,
+    })
+    applicationId: string,
     @Param('moduleName') moduleName: SdkModuleName,
     @AuthWorkspace() workspace: WorkspaceEntity,
     @Param('checksum') checksum?: string,
@@ -91,7 +116,9 @@ export class SdkClientController {
                 applicationUniversalIdentifier: application.universalIdentifier,
                 moduleName,
               }),
-            checksum: application.sdkClientCoreChecksum,
+            checksum: buildServedSdkClientCoreChecksum(
+              application.sdkClientCoreChecksum,
+            ),
           };
 
     this.sendSdkModule({

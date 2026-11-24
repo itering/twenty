@@ -1,3 +1,4 @@
+import { isCanonicalRecordField } from '@/object-record/record-field/utils/isCanonicalRecordField';
 import { type FieldMetadata } from '@/object-record/record-field/ui/types/FieldMetadata';
 import { type ColumnDefinition } from '@/object-record/record-table/types/ColumnDefinition';
 import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
@@ -21,14 +22,7 @@ import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/
 import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { ViewType } from '@/views/types/ViewType';
-import { isDefined } from 'twenty-shared/utils';
-
-export const sleep = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-export const percentage = (part: number, whole: number): number => {
-  return Math.round((part / whole) * 100);
-};
+import { isDefined, isNonEmptyArray } from 'twenty-shared/utils';
 
 export type UseRecordDataOptions = {
   delayMs: number;
@@ -36,14 +30,16 @@ export type UseRecordDataOptions = {
   objectMetadataItem: EnrichedObjectMetadataItem;
   pageSize?: number;
   recordIndexId: string;
-  callback: (
-    rows: ObjectRecord[],
+  callback: (data: {
+    rows: ObjectRecord[];
     columns: Pick<
       ColumnDefinition<FieldMetadata>,
       'label' | 'type' | 'metadata'
-    >[],
-  ) => void | Promise<void>;
+    >[];
+  }) => void | Promise<void>;
   viewType?: ViewType;
+  onMoreRecords?: () => Promise<void>;
+  abortSignal?: AbortSignal;
 };
 
 export const useRecordIndexLazyFetchRecords = ({
@@ -54,6 +50,8 @@ export const useRecordIndexLazyFetchRecords = ({
   recordIndexId,
   callback,
   viewType = ViewType.TABLE,
+  onMoreRecords,
+  abortSignal,
 }: UseRecordDataOptions) => {
   const { hiddenBoardFields } = useObjectOptionsForBoard({
     objectNameSingular: objectMetadataItem.nameSingular,
@@ -125,7 +123,9 @@ export const useRecordIndexLazyFetchRecords = ({
     ColumnDefinition<FieldMetadata>,
     'label' | 'type' | 'metadata'
   >[] = [
+    // Extra columns would export as duplicates of their canonical column
     ...visibleRecordFields
+      .filter(isCanonicalRecordField)
       .map((field: RecordField) => {
         const fieldMetadataItem = objectMetadataItem.fields.find(
           (fieldMetadataItem) =>
@@ -142,6 +142,7 @@ export const useRecordIndexLazyFetchRecords = ({
           metadata: {
             fieldName: fieldMetadataItem.name,
             relationType: fieldMetadataItem.relation?.type,
+            morphRelations: fieldMetadataItem.morphRelations ?? [],
           },
         };
       })
@@ -151,18 +152,40 @@ export const useRecordIndexLazyFetchRecords = ({
       : []),
   ];
 
-  const { progress, isDownloading, fetchAllRecords } = useLazyFetchAllRecords({
-    ...findManyRecordsParams,
-    filter: queryFilter,
-    limit: pageSize,
-    delayMs,
-    maximumRequests,
-  });
+  const { progress, isDownloading, fetchAllRecords, fetchFirstPage } =
+    useLazyFetchAllRecords({
+      ...findManyRecordsParams,
+      filter: queryFilter,
+      limit: pageSize,
+      delayMs,
+      maximumRequests,
+      fetchPolicy: isDefined(onMoreRecords) ? 'network-only' : undefined,
+    });
 
   const getTableData = async () => {
+    if (isDefined(onMoreRecords)) {
+      const firstPage = await fetchFirstPage();
+
+      if (abortSignal?.aborted) {
+        return;
+      }
+
+      if (isDefined(firstPage.error)) {
+        throw firstPage.error;
+      }
+
+      if (firstPage.hasNextPage) {
+        await onMoreRecords();
+      } else if (isNonEmptyArray(firstPage.records)) {
+        await callback({ rows: firstPage.records, columns: finalColumns });
+      }
+
+      return;
+    }
+
     const result = await fetchAllRecords();
-    if (result.length > 0) {
-      callback(result, finalColumns);
+    if (isNonEmptyArray(result)) {
+      await callback({ rows: result, columns: finalColumns });
     }
   };
 

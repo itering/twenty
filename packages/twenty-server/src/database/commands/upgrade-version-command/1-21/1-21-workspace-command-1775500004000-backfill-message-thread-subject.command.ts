@@ -71,8 +71,6 @@ export class BackfillMessageThreadSubjectCommand extends ProvisionedWorkspaceCom
        WHERE mt.id = sub."messageThreadId"
          AND mt."subject" IS NULL`,
       undefined,
-      undefined,
-      { shouldBypassPermissionChecks: true },
     );
 
     this.logger.log(
@@ -114,6 +112,7 @@ export class BackfillMessageThreadSubjectCommand extends ProvisionedWorkspaceCom
     const validateAndBuildResult =
       await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunLegacyWorkspaceMigration(
         {
+          shouldDeferActions: false,
           allFlatEntityOperationByMetadataName: {
             fieldMetadata: {
               flatEntityToCreate: [],
@@ -232,6 +231,7 @@ export class BackfillMessageThreadSubjectCommand extends ProvisionedWorkspaceCom
     const validateAndBuildResult =
       await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunLegacyWorkspaceMigration(
         {
+          shouldDeferActions: false,
           allFlatEntityOperationByMetadataName: {
             fieldMetadata: {
               flatEntityToCreate: [flatFieldMetadataToCreate],

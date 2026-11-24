@@ -171,6 +171,24 @@ describe('parseICalEvents', () => {
     });
   });
 
+  it('lowercases ORGANIZER and ATTENDEE handles', () => {
+    const ics = buildVEvent([
+      'UID:abc',
+      'SUMMARY:Sync',
+      'DTSTART:20260601T100000Z',
+      'DTEND:20260601T110000Z',
+      'ORGANIZER;CN=Jane:mailto:Jane.Roe@Example.com',
+      'ATTENDEE:mailto:John.Doe@Example.com',
+    ]);
+
+    const participants = parseICalEvents(ics, HREF)[0].participants;
+
+    expect(participants.map((participant) => participant.handle)).toEqual([
+      'jane.roe@example.com',
+      'john.doe@example.com',
+    ]);
+  });
+
   it('handles bare ATTENDEE (plain mailto, no params) — node-ical returns a string', () => {
     const ics = buildVEvent([
       'UID:abc',
@@ -189,6 +207,27 @@ describe('parseICalEvents', () => {
       displayName: 'bare@example.com',
       isOrganizer: false,
     });
+  });
+
+  it('lists ROOM and RESOURCE attendees as resources, case-insensitively', () => {
+    const ics = buildVEvent([
+      'UID:abc',
+      'SUMMARY:Sync',
+      'DTSTART:20260601T100000Z',
+      'DTEND:20260601T110000Z',
+      'ATTENDEE;CUTYPE=INDIVIDUAL:mailto:person@example.com',
+      'ATTENDEE;CUTYPE=ROOM:mailto:Room@example.com',
+      'ATTENDEE;CUTYPE=resource:mailto:projector@example.com',
+      'ATTENDEE:mailto:default@example.com',
+    ]);
+
+    const [event] = parseICalEvents(ics, HREF);
+
+    expect(event.resourceHandles).toEqual([
+      'room@example.com',
+      'projector@example.com',
+    ]);
+    expect(event.participants).toHaveLength(4);
   });
 
   it('extracts the organizer with mailto stripped and ACCEPTED status', () => {
@@ -239,6 +278,42 @@ describe('parseICalEvents', () => {
     expect(parseICalEvents('not a calendar', HREF)).toEqual([]);
   });
 
+  it('parses calendar data with bare CR line breaks as served by Kerio Connect', () => {
+    const ics = buildVEvent([
+      'UID:abc',
+      'SUMMARY:Kerio event',
+      'DTSTART:20260901T100000Z',
+      'DTEND:20260901T110000Z',
+    ]).replace(/\r\n/g, '\r');
+
+    const [event] = parseICalEvents(ics, HREF);
+
+    expect(event).toMatchObject({
+      iCalUid: 'abc',
+      title: 'Kerio event',
+      startsAt: '2026-09-01T10:00:00.000Z',
+      endsAt: '2026-09-01T11:00:00.000Z',
+    });
+  });
+
+  it('parses calendar data with bare LF line breaks', () => {
+    const ics = buildVEvent([
+      'UID:abc',
+      'SUMMARY:LF event',
+      'DTSTART:20260901T100000Z',
+      'DTEND:20260901T110000Z',
+    ]).replace(/\r\n/g, '\n');
+
+    const [event] = parseICalEvents(ics, HREF);
+
+    expect(event).toMatchObject({
+      iCalUid: 'abc',
+      title: 'LF event',
+      startsAt: '2026-09-01T10:00:00.000Z',
+      endsAt: '2026-09-01T11:00:00.000Z',
+    });
+  });
+
   it('skips a VEVENT missing DTSTART without dropping its siblings', () => {
     const ics = buildVCalendar([
       ['UID:no-start', 'SUMMARY:Broken'],
@@ -253,5 +328,26 @@ describe('parseICalEvents', () => {
     const events = parseICalEvents(ics, HREF);
 
     expect(events.map((event) => event.iCalUid)).toEqual(['healthy']);
+  });
+
+  it.each([
+    [[], false],
+    [['CLASS:PUBLIC'], false],
+    [['CLASS:PRIVATE'], true],
+    [['CLASS:CONFIDENTIAL'], true],
+    [['CLASS:private'], true],
+    [['CLASS:X-SECRET'], true],
+  ])('maps %j to isPrivate %s', (classLines, isPrivate) => {
+    const ics = buildVEvent([
+      'UID:abc',
+      'SUMMARY:Doctor',
+      'DTSTART:20260601T100000Z',
+      'DTEND:20260601T110000Z',
+      ...classLines,
+    ]);
+
+    const [event] = parseICalEvents(ics, HREF);
+
+    expect(event.isPrivate).toBe(isPrivate);
   });
 });

@@ -6,45 +6,108 @@ import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/typ
 import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
 import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
 import {
-  type RowLevelPermissionPredicateGroupInput,
-  type RowLevelPermissionPredicateInput,
-} from 'src/engine/metadata-modules/row-level-permission-predicate/dtos/inputs/upsert-row-level-permission-predicates.input';
-import {
   RowLevelPermissionPredicateException,
   RowLevelPermissionPredicateExceptionCode,
 } from 'src/engine/metadata-modules/row-level-permission-predicate/exceptions/row-level-permission-predicate.exception';
 import { type FlatRowLevelPermissionPredicateGroup } from 'src/engine/metadata-modules/row-level-permission-predicate/types/flat-row-level-permission-predicate-group.type';
 import { type FlatRowLevelPermissionPredicate } from 'src/engine/metadata-modules/row-level-permission-predicate/types/flat-row-level-permission-predicate.type';
+import { type FlatRowLevelPermissionRule } from 'src/engine/metadata-modules/row-level-permission-predicate/types/flat-row-level-permission-rule.type';
+import { type FlattenedRowLevelPermissionRuleInputs } from 'src/engine/metadata-modules/row-level-permission-predicate/types/flattened-row-level-permission-rule-inputs.type';
 
-// Supplied ids are resolved workspace-wide further down, and the migration
-// validators only compare an update against its own stored row, so a predicate
-// or group id belonging to another role or object would be silently rewritten
-// in place, and a field from another object would build a filter that never
-// matches. Scope everything to the requested role and object upfront.
+const getRuleFieldObjectMetadataIdOrThrow = ({
+  relationFieldMetadataId,
+  objectMetadataId,
+  flatFieldMetadataMaps,
+}: {
+  relationFieldMetadataId: string | null | undefined;
+  objectMetadataId: string;
+  flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+}): string => {
+  if (!isDefined(relationFieldMetadataId)) {
+    return objectMetadataId;
+  }
+
+  const relationTargetObjectMetadataId = findFlatEntityByIdInFlatEntityMaps({
+    flatEntityId: relationFieldMetadataId,
+    flatEntityMaps: flatFieldMetadataMaps,
+  })?.relationTargetObjectMetadataId;
+
+  if (!isDefined(relationTargetObjectMetadataId)) {
+    throw new RowLevelPermissionPredicateException(
+      'relationFieldMetadataId does not point to a relation field. A rule can only reach another object through a relation.',
+      RowLevelPermissionPredicateExceptionCode.INVALID_ROW_LEVEL_PERMISSION_PREDICATE_DATA,
+    );
+  }
+
+  return relationTargetObjectMetadataId;
+};
+
+const findExpectedWorkspaceMemberFieldObjectMetadataId = ({
+  workspaceMemberRelationFieldMetadataId,
+  workspaceMemberObjectMetadataId,
+  flatFieldMetadataMaps,
+}: {
+  workspaceMemberRelationFieldMetadataId: string | null | undefined;
+  workspaceMemberObjectMetadataId: string;
+  flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+}): string | null | undefined => {
+  if (!isDefined(workspaceMemberRelationFieldMetadataId)) {
+    return workspaceMemberObjectMetadataId;
+  }
+
+  const workspaceMemberRelationFieldMetadata =
+    findFlatEntityByIdInFlatEntityMaps({
+      flatEntityId: workspaceMemberRelationFieldMetadataId,
+      flatEntityMaps: flatFieldMetadataMaps,
+    });
+
+  return workspaceMemberRelationFieldMetadata?.objectMetadataId ===
+    workspaceMemberObjectMetadataId
+    ? workspaceMemberRelationFieldMetadata.relationTargetObjectMetadataId
+    : undefined;
+};
+
+// Ids resolve workspace-wide downstream and migration validators only compare an update to its own row, so another
+// role's or object's ids would be silently rewritten and another object's field would build a never-matching filter
 export const validateRowLevelPermissionRuleOwnershipOrThrow = ({
   roleId,
   objectMetadataId,
+  rules,
   predicates,
   predicateGroups,
+  flatRowLevelPermissionRuleMaps,
   flatRowLevelPermissionPredicateMaps,
   flatRowLevelPermissionPredicateGroupMaps,
   flatFieldMetadataMaps,
   workspaceMemberObjectMetadataId,
-}: {
+}: FlattenedRowLevelPermissionRuleInputs & {
   roleId: string;
   objectMetadataId: string;
-  predicates: RowLevelPermissionPredicateInput[];
-  predicateGroups: RowLevelPermissionPredicateGroupInput[];
+  flatRowLevelPermissionRuleMaps: FlatEntityMaps<FlatRowLevelPermissionRule>;
   flatRowLevelPermissionPredicateMaps: FlatEntityMaps<FlatRowLevelPermissionPredicate>;
   flatRowLevelPermissionPredicateGroupMaps: FlatEntityMaps<FlatRowLevelPermissionPredicateGroup>;
   flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
   workspaceMemberObjectMetadataId?: string;
 }): void => {
-  for (const predicateGroup of predicateGroups) {
-    if (!isDefined(predicateGroup.id)) {
-      continue;
-    }
+  for (const rule of rules) {
+    const existingRule = findFlatEntityByIdInFlatEntityMaps({
+      flatEntityId: rule.id,
+      flatEntityMaps: flatRowLevelPermissionRuleMaps,
+    });
 
+    if (
+      isDefined(existingRule) &&
+      (existingRule.roleId !== roleId ||
+        existingRule.objectMetadataId !== objectMetadataId)
+    ) {
+      throw new RowLevelPermissionPredicateException(
+        'Rule belongs to a different role or object and cannot be modified here. Omit the id to create a new rule.',
+        RowLevelPermissionPredicateExceptionCode.UNAUTHORIZED_OBJECT_MODIFICATION,
+      );
+    }
+  }
+
+  for (const predicateGroup of predicateGroups) {
     const existingGroup = findFlatEntityByIdInFlatEntityMaps({
       flatEntityId: predicateGroup.id,
       flatEntityMaps: flatRowLevelPermissionPredicateGroupMaps,
@@ -63,51 +126,22 @@ export const validateRowLevelPermissionRuleOwnershipOrThrow = ({
     }
   }
 
-  const groupIdsInPayload = new Set(
-    predicateGroups
-      .map((predicateGroup) => predicateGroup.id)
-      .filter(isDefined),
-  );
-
   for (const predicate of predicates) {
-    if (isDefined(predicate.id)) {
-      const existingPredicate = findFlatEntityByIdInFlatEntityMaps({
-        flatEntityId: predicate.id,
-        flatEntityMaps: flatRowLevelPermissionPredicateMaps,
-      });
+    const existingPredicate = findFlatEntityByIdInFlatEntityMaps({
+      flatEntityId: predicate.id,
+      flatEntityMaps: flatRowLevelPermissionPredicateMaps,
+    });
 
-      if (
-        isDefined(existingPredicate) &&
-        existingPredicate.deletedAt === null &&
-        (existingPredicate.roleId !== roleId ||
-          existingPredicate.objectMetadataId !== objectMetadataId)
-      ) {
-        throw new RowLevelPermissionPredicateException(
-          'Predicate belongs to a different role or object and cannot be modified here. Omit the id to create a new predicate.',
-          RowLevelPermissionPredicateExceptionCode.UNAUTHORIZED_ROLE_MODIFICATION,
-        );
-      }
-    }
-
-    const groupId = predicate.rowLevelPermissionPredicateGroupId;
-
-    if (isDefined(groupId) && !groupIdsInPayload.has(groupId)) {
-      const referencedGroup = findFlatEntityByIdInFlatEntityMaps({
-        flatEntityId: groupId,
-        flatEntityMaps: flatRowLevelPermissionPredicateGroupMaps,
-      });
-
-      if (
-        !isDefined(referencedGroup) ||
-        referencedGroup.deletedAt !== null ||
-        referencedGroup.roleId !== roleId ||
-        referencedGroup.objectMetadataId !== objectMetadataId
-      ) {
-        throw new RowLevelPermissionPredicateException(
-          'Referenced predicate group is not a group of this role and object. Reference a group declared in predicateGroups or an existing group of this role and object.',
-          RowLevelPermissionPredicateExceptionCode.INVALID_ROW_LEVEL_PERMISSION_PREDICATE_DATA,
-        );
-      }
+    if (
+      isDefined(existingPredicate) &&
+      existingPredicate.deletedAt === null &&
+      (existingPredicate.roleId !== roleId ||
+        existingPredicate.objectMetadataId !== objectMetadataId)
+    ) {
+      throw new RowLevelPermissionPredicateException(
+        'Predicate belongs to a different role or object and cannot be modified here. Omit the id to create a new predicate.',
+        RowLevelPermissionPredicateExceptionCode.UNAUTHORIZED_ROLE_MODIFICATION,
+      );
     }
 
     const fieldMetadata = findFlatEntityByIdInFlatEntityMaps({
@@ -122,9 +156,15 @@ export const validateRowLevelPermissionRuleOwnershipOrThrow = ({
       );
     }
 
-    if (fieldMetadata.objectMetadataId !== objectMetadataId) {
+    const expectedFieldObjectMetadataId = getRuleFieldObjectMetadataIdOrThrow({
+      relationFieldMetadataId: predicate.relationFieldMetadataId,
+      objectMetadataId,
+      flatFieldMetadataMaps,
+    });
+
+    if (fieldMetadata.objectMetadataId !== expectedFieldObjectMetadataId) {
       throw new RowLevelPermissionPredicateException(
-        'Field belongs to another object and cannot be used in a rule on this object. Rules must filter on a field of the object they restrict.',
+        'Field belongs to another object and cannot be used in a rule on this object. Rules must filter on a field of the object they restrict, or of the object reached by their relation field.',
         RowLevelPermissionPredicateExceptionCode.INVALID_ROW_LEVEL_PERMISSION_PREDICATE_DATA,
       );
     }
@@ -143,14 +183,22 @@ export const validateRowLevelPermissionRuleOwnershipOrThrow = ({
       flatEntityId: workspaceMemberFieldMetadataId,
       flatEntityMaps: flatFieldMetadataMaps,
     });
+    const expectedWorkspaceMemberFieldObjectMetadataId =
+      findExpectedWorkspaceMemberFieldObjectMetadataId({
+        workspaceMemberRelationFieldMetadataId:
+          predicate.workspaceMemberRelationFieldMetadataId,
+        workspaceMemberObjectMetadataId,
+        flatFieldMetadataMaps,
+      });
 
     if (
       !isDefined(workspaceMemberFieldMetadata) ||
+      !isDefined(expectedWorkspaceMemberFieldObjectMetadataId) ||
       workspaceMemberFieldMetadata.objectMetadataId !==
-        workspaceMemberObjectMetadataId
+        expectedWorkspaceMemberFieldObjectMetadataId
     ) {
       throw new RowLevelPermissionPredicateException(
-        'workspaceMemberFieldMetadataId is not a field of the workspaceMember object. The rule would silently never apply.',
+        'workspaceMemberFieldMetadataId is not a field of the workspaceMember object, or of the object its relation reaches. The rule would silently never apply.',
         RowLevelPermissionPredicateExceptionCode.INVALID_ROW_LEVEL_PERMISSION_PREDICATE_DATA,
       );
     }

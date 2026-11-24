@@ -25,6 +25,8 @@ export type ViewFieldManifest = SyncableEntityOptions & {
   position: number;
   aggregateOperation?: AggregateOperations;
   viewFieldGroupUniversalIdentifier?: string;
+  isCanonical?: boolean;
+  relationTargetFieldMetadataUniversalIdentifier?: string;
 };
 
 export type StandaloneViewFieldManifest = ViewFieldManifest & {
@@ -36,6 +38,7 @@ export type ViewFilterManifest = SyncableEntityOptions & {
   operand: ViewFilterOperand;
   value: ViewManifestFilterValue;
   subFieldName?: string;
+  relationTargetFieldMetadataUniversalIdentifier?: string;
   viewFilterGroupUniversalIdentifier?: string;
   positionInViewFilterGroup?: number;
 };
@@ -62,6 +65,7 @@ export type ViewSortManifest = SyncableEntityOptions & {
   fieldMetadataUniversalIdentifier: string;
   direction: ViewSortDirection;
   subFieldName?: string;
+  relationTargetFieldMetadataUniversalIdentifier?: string;
 };
 
 export type ViewManifest = SyncableEntityOptions & {
@@ -69,9 +73,10 @@ export type ViewManifest = SyncableEntityOptions & {
   objectUniversalIdentifier: string;
   type?: ViewType;
   /**
-   * @deprecated The INDEX key is reserved for the engine-owned default view,
-   * which the server provisions automatically for every object. This field is
-   * ignored: manifest views are always created as additional views.
+   * @deprecated View keys (INDEX, FIELDS_WIDGET) are reserved for the
+   * engine-owned default views, which the server provisions automatically for
+   * every object. This field is ignored: manifest views are always created as
+   * additional views.
    */
   key?: ViewKey;
   icon?: string;
@@ -81,6 +86,8 @@ export type ViewManifest = SyncableEntityOptions & {
   openRecordIn?: ViewOpenRecordIn;
   mainGroupByFieldMetadataUniversalIdentifier?: string;
   shouldHideEmptyGroups?: boolean;
+  shouldDisplayGroupsAsTabs?: boolean;
+  groupLoadLimit?: number;
   anyFieldFilterValue?: string | null;
   kanbanColumnWidth?: number | null;
   kanbanAggregateOperation?: AggregateOperations;

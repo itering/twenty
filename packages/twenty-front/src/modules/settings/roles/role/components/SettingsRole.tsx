@@ -1,32 +1,38 @@
+import { getToastOptionsFromError } from '@/error-handler/utils/getToastOptionsFromError';
 import { SaveAndCancelButtons } from '@/settings/components/SaveAndCancelButtons/SaveAndCancelButtons';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
+import { SettingsTabBar } from '@/settings/components/layout/SettingsTabBar';
+import { DEFAULT_SETTINGS_DRAFT_ROLE } from '@/settings/roles/constants/DefaultSettingsDraftRole';
 import { SettingsRoleAssignment } from '@/settings/roles/role-assignment/components/SettingsRoleAssignment';
+import { useIsRoleInboxChannelAccessDirty } from '@/settings/roles/role-permissions/inbox-channels/hooks/useIsRoleInboxChannelAccessDirty';
+import { useResetRoleInboxChannelAccess } from '@/settings/roles/role-permissions/inbox-channels/hooks/useResetRoleInboxChannelAccess';
+import { useSaveRoleInboxChannelAccess } from '@/settings/roles/role-permissions/inbox-channels/hooks/useSaveRoleInboxChannelAccess';
 import { SettingsRolePermissions } from '@/settings/roles/role-permissions/components/SettingsRolePermissions';
 import { SettingsRoleSettings } from '@/settings/roles/role-settings/components/SettingsRoleSettings';
 import { SettingsRoleLabelContainer } from '@/settings/roles/role/components/SettingsRoleLabelContainer';
 import { SETTINGS_ROLE_DETAIL_TABS } from '@/settings/roles/role/constants/SettingsRoleDetailTabs';
 import { useSaveDraftRoleToDB } from '@/settings/roles/role/hooks/useSaveDraftRoleToDB';
 import { settingsDraftRoleFamilyState } from '@/settings/roles/states/settingsDraftRoleFamilyState';
+import { settingsInitialDraftRoleFamilyState } from '@/settings/roles/states/settingsInitialDraftRoleFamilyState';
 import { settingsPersistedRoleFamilyState } from '@/settings/roles/states/settingsPersistedRoleFamilyState';
-import { settingsRolesIsLoadingState } from '@/settings/roles/states/settingsRolesIsLoadingState';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
-import { SettingsTabBar } from '@/settings/components/layout/SettingsTabBar';
+import { useWorkspaceSurfaceScopedComponentInstanceId } from '@/ui/layout/hooks/useWorkspaceSurfaceScopedComponentInstanceId';
 import { activeTabIdComponentState } from '@/ui/layout/tab-list/states/activeTabIdComponentState';
 import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
-import { useLoadCurrentUser } from '@/users/hooks/useLoadCurrentUser';
 import { useAtomFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilyStateValue';
 import { useSetAtomFamilyState } from '@/ui/utilities/state/jotai/hooks/useSetAtomFamilyState';
-import { t } from '@lingui/core/macro';
-import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useLoadCurrentUser } from '@/users/hooks/useLoadCurrentUser';
+import { useRefreshInboxChannels } from '@/inbox/hooks/useRefreshInboxChannels';
 import { useState } from 'react';
 import { SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath, isDefined } from 'twenty-shared/utils';
-import { IconLockOpen, IconSettings, IconUserPlus } from 'twenty-ui/icon';
+import { useToast } from 'twenty-ui/components/feedback';
+import { IconLock, IconSettings, IconUserPlus } from 'twenty-ui/icon';
 
 import { useNavigateSettings } from '~/hooks/useNavigateSettings';
-import { getDirtyFields } from '~/utils/getDirtyFields';
 import { isDeeplyEqual } from '~/utils/isDeeplyEqual';
+import { getRoleDirtyFields } from '@/settings/roles/role/utils/getRoleDirtyFields';
+import { useLingui } from '@lingui/react/macro';
 
 type SettingsRoleProps = {
   roleId: string;
@@ -34,16 +40,19 @@ type SettingsRoleProps = {
 };
 
 export const SettingsRole = ({ roleId, isCreateMode }: SettingsRoleProps) => {
+  const { t } = useLingui();
+  const tabsComponentInstanceId = useWorkspaceSurfaceScopedComponentInstanceId(
+    SETTINGS_ROLE_DETAIL_TABS.COMPONENT_INSTANCE_ID + '-' + roleId,
+  );
+
   const activeTabId = useAtomComponentStateValue(
     activeTabIdComponentState,
-    SETTINGS_ROLE_DETAIL_TABS.COMPONENT_INSTANCE_ID + '-' + roleId,
+    tabsComponentInstanceId,
   );
 
   const navigateSettings = useNavigateSettings();
 
   const [isSaving, setIsSaving] = useState(false);
-
-  const settingsRolesIsLoading = useAtomStateValue(settingsRolesIsLoadingState);
 
   const settingsDraftRole = useAtomFamilyStateValue(
     settingsDraftRoleFamilyState,
@@ -53,6 +62,10 @@ export const SettingsRole = ({ roleId, isCreateMode }: SettingsRoleProps) => {
     settingsDraftRoleFamilyState,
     roleId,
   );
+  const setSettingsInitialDraftRole = useSetAtomFamilyState(
+    settingsInitialDraftRoleFamilyState,
+    roleId,
+  );
 
   const settingsPersistedRole = useAtomFamilyStateValue(
     settingsPersistedRoleFamilyState,
@@ -60,12 +73,19 @@ export const SettingsRole = ({ roleId, isCreateMode }: SettingsRoleProps) => {
   );
 
   const { loadCurrentUser } = useLoadCurrentUser();
+  const { refreshInboxChannels } = useRefreshInboxChannels();
+  const isRoleInboxChannelAccessDirty =
+    useIsRoleInboxChannelAccessDirty(roleId);
+  const { saveRoleInboxChannelAccess } = useSaveRoleInboxChannelAccess(roleId);
+  const { resetRoleInboxChannelAccess } =
+    useResetRoleInboxChannelAccess(roleId);
 
-  const { enqueueErrorSnackBar } = useSnackBar();
+  const { enqueueToast } = useToast();
 
   const { saveDraftRoleToDB } = useSaveDraftRoleToDB({
     isCreateMode,
     roleId,
+    draftRole: settingsDraftRole,
     onSuccess: async (savedRoleId) => {
       if (isCreateMode) {
         navigateSettings(SettingsPath.RoleDetail, { roleId: savedRoleId });
@@ -79,7 +99,7 @@ export const SettingsRole = ({ roleId, isCreateMode }: SettingsRoleProps) => {
     {
       id: SETTINGS_ROLE_DETAIL_TABS.TABS_IDS.PERMISSIONS,
       title: t`Permissions`,
-      Icon: IconLockOpen,
+      Icon: IconLock,
     },
     {
       id: SETTINGS_ROLE_DETAIL_TABS.TABS_IDS.ASSIGNMENT,
@@ -93,10 +113,18 @@ export const SettingsRole = ({ roleId, isCreateMode }: SettingsRoleProps) => {
     },
   ];
 
-  const isDirty = !isDeeplyEqual(settingsDraftRole, settingsPersistedRole);
+  const dirtyFields = getRoleDirtyFields(
+    settingsDraftRole,
+    settingsPersistedRole,
+  );
+  const isRoleDirty = Object.keys(dirtyFields).length > 0;
+  const isDirty = isRoleDirty || isRoleInboxChannelAccessDirty;
 
   const handleCancel = () => {
+    resetRoleInboxChannelAccess();
+
     if (isCreateMode) {
+      setSettingsDraftRole(DEFAULT_SETTINGS_DRAFT_ROLE);
       navigateSettings(SettingsPath.Roles);
       return;
     }
@@ -107,41 +135,52 @@ export const SettingsRole = ({ roleId, isCreateMode }: SettingsRoleProps) => {
   };
 
   const handleSave = async () => {
-    setIsSaving(true);
-
-    const dirtyFields = getDirtyFields(
-      settingsDraftRole,
-      settingsPersistedRole,
-    );
-
     if (isDefined(dirtyFields.label) && dirtyFields.label === '') {
-      enqueueErrorSnackBar({
-        message: t`Role name cannot be empty`,
+      enqueueToast({
+        status: 'error',
+        children: t`Role name cannot be empty`,
       });
       return;
     }
 
+    setIsSaving(true);
+
     try {
-      await saveDraftRoleToDB();
-      await loadCurrentUser();
+      if (isCreateMode || isRoleDirty) {
+        const savedRole = await saveDraftRoleToDB();
+
+        if (isDefined(savedRole)) {
+          setSettingsInitialDraftRole(savedRole);
+          setSettingsDraftRole((currentDraftRole) =>
+            isDeeplyEqual(currentDraftRole, settingsDraftRole)
+              ? savedRole
+              : currentDraftRole,
+          );
+        }
+
+        await loadCurrentUser();
+      }
+      if (isRoleInboxChannelAccessDirty) {
+        await saveRoleInboxChannelAccess();
+      } else if (isDefined(dirtyFields.canAccessAllAgentChatChannels)) {
+        await refreshInboxChannels();
+      }
+    } catch (error) {
+      enqueueToast(getToastOptionsFromError({ error }));
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (!isDefined(settingsRolesIsLoading)) {
-    return <></>;
-  }
-
   return (
     <SettingsPageLayout
       title={<SettingsRoleLabelContainer roleId={roleId} />}
+      pageTitle={settingsDraftRole.label}
       secondaryBar={
         <SettingsTabBar
+          aria-label={t`Role settings`}
           tabs={tabs}
-          componentInstanceId={
-            SETTINGS_ROLE_DETAIL_TABS.COMPONENT_INSTANCE_ID + '-' + roleId
-          }
+          componentInstanceId={tabsComponentInstanceId}
         />
       }
       links={[

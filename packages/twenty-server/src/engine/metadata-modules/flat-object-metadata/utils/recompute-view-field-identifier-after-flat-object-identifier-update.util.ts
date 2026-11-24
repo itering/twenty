@@ -1,3 +1,4 @@
+import { ViewType } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 import { v4 } from 'uuid';
 
@@ -27,10 +28,13 @@ export const recomputeViewFieldIdentifierAfterFlatObjectIdentifierUpdate = ({
   flatFieldMetadataMaps,
   updatedLabelIdentifierFieldMetadataId,
 }: RecomputeViewFieldIdentifierAfterFlatObjectIdentifierUpdateArgs): FlatViewFieldToCreateAndUpdate => {
+  // FIELDS_WIDGET record-page views are excluded: the engine owns their label
+  // identifier lifecycle (objectRecordPageLabelIdentifierOnUpdate) and the
+  // record page never displays the label identifier.
   const flatViews = findManyFlatEntityByIdInFlatEntityMapsOrThrow({
     flatEntityMaps: flatViewMaps,
     flatEntityIds: existingFlatObjectMetadata.viewIds,
-  });
+  }).filter((flatView) => flatView.type !== ViewType.FIELDS_WIDGET);
 
   const updatedLabelIdentifierFieldMetadata =
     findFlatEntityByIdInFlatEntityMapsOrThrow({
@@ -50,6 +54,7 @@ export const recomputeViewFieldIdentifierAfterFlatObjectIdentifierUpdate = ({
     });
     const labelMetadataIdentifierViewField = flatViewFields.find(
       (viewField) =>
+        viewField.isCanonical &&
         viewField.fieldMetadataId === updatedLabelIdentifierFieldMetadataId,
     );
 
@@ -72,6 +77,7 @@ export const recomputeViewFieldIdentifierAfterFlatObjectIdentifierUpdate = ({
         isVisible: true,
         isActive: true,
         isSystemSideEffect: flatView.isSystemSideEffect,
+        isCanonical: true,
         size: DEFAULT_VIEW_FIELD_SIZE,
         viewId: flatView.id,
         viewUniversalIdentifier: flatView.universalIdentifier,
@@ -82,6 +88,8 @@ export const recomputeViewFieldIdentifierAfterFlatObjectIdentifierUpdate = ({
         deletedAt: null,
         universalIdentifier: viewFieldId,
         aggregateOperation: null,
+        relationTargetFieldMetadataId: null,
+        relationTargetFieldMetadataUniversalIdentifier: null,
         viewFieldGroupId: null,
         viewFieldGroupUniversalIdentifier: null,
         overrides: null,

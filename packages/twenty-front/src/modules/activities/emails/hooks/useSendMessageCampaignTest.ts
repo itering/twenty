@@ -1,13 +1,13 @@
-import { CombinedGraphQLErrors } from '@apollo/client/errors';
 import { useMutation } from '@apollo/client/react';
 
 import { SEND_MESSAGE_CAMPAIGN_TEST } from '@/activities/emails/graphql/mutations/sendMessageCampaignTest';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { t } from '@lingui/core/macro';
+import { getToastOptionsFromError } from '@/error-handler/utils/getToastOptionsFromError';
+import { useToast } from 'twenty-ui/components/feedback';
 import {
   type SendMessageCampaignTestMutation,
   type SendMessageCampaignTestMutationVariables,
 } from '~/generated-metadata/graphql';
+import { useLingui } from '@lingui/react/macro';
 
 type SendMessageCampaignTestParams = {
   toAddress: string;
@@ -18,12 +18,13 @@ type SendMessageCampaignTestParams = {
 };
 
 export const useSendMessageCampaignTest = () => {
+  const { t } = useLingui();
   const [sendMessageCampaignTestMutation, { loading }] = useMutation<
     SendMessageCampaignTestMutation,
     SendMessageCampaignTestMutationVariables
   >(SEND_MESSAGE_CAMPAIGN_TEST);
 
-  const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
+  const { enqueueToast } = useToast();
 
   const sendMessageCampaignTest = async (
     params: SendMessageCampaignTestParams,
@@ -34,20 +35,22 @@ export const useSendMessageCampaignTest = () => {
       });
 
       if (!result.data?.sendMessageCampaignTest) {
-        enqueueErrorSnackBar({ message: t`Failed to send test email` });
+        enqueueToast({
+          status: 'error',
+          children: t`Failed to send test email`,
+        });
 
         return false;
       }
 
-      enqueueSuccessSnackBar({
-        message: t`Test email sent to ${params.toAddress}`,
+      enqueueToast({
+        status: 'success',
+        children: t`Test email sent to ${params.toAddress}`,
       });
 
       return true;
     } catch (error) {
-      enqueueErrorSnackBar({
-        ...(CombinedGraphQLErrors.is(error) ? { apolloError: error } : {}),
-      });
+      enqueueToast(getToastOptionsFromError({ error }));
 
       return false;
     }

@@ -6,15 +6,17 @@ import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMembe
 import { ScrollWrapper } from '@/ui/utilities/scroll/components/ScrollWrapper';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { getAttendeeName } from '@/onboarding/utils/getAttendeeName';
-import { useThemeColorScheme } from 'twenty-ui/theme-constants';
+import { useThemeColorScheme } from 'twenty-ui/theme';
 import { useIsMobile } from 'twenty-ui/utilities';
 
 type BookCallEmbedProps = {
   calendarBookingPageId: string;
+  date?: string;
 };
 
 export const BookCallEmbed = ({
   calendarBookingPageId,
+  date,
 }: BookCallEmbedProps) => {
   const colorScheme = useThemeColorScheme();
   const currentUser = useAtomStateValue(currentUserState);
@@ -37,6 +39,7 @@ export const BookCallEmbed = ({
           theme: colorScheme,
           email: currentUser?.email ?? '',
           name: attendeeName,
+          ...(isDefined(date) && { date, month: date.slice(0, 7) }),
         }}
       />
     </ScrollWrapper>

@@ -2,53 +2,66 @@ import { UseFilters, UseGuards } from '@nestjs/common';
 import { Args, Mutation, Query } from '@nestjs/graphql';
 
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { AuthUserWorkspaceId } from 'src/engine/decorators/auth/auth-user-workspace-id.decorator';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
 import { MetadataResolver } from 'src/engine/api/graphql/graphql-config/decorators/metadata-resolver.decorator';
-import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
-import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
 import { CreateViewFilterInput } from 'src/engine/metadata-modules/view-filter/dtos/inputs/create-view-filter.input';
 import { DeleteViewFilterInput } from 'src/engine/metadata-modules/view-filter/dtos/inputs/delete-view-filter.input';
 import { DestroyViewFilterInput } from 'src/engine/metadata-modules/view-filter/dtos/inputs/destroy-view-filter.input';
 import { UpdateViewFilterInput } from 'src/engine/metadata-modules/view-filter/dtos/inputs/update-view-filter.input';
 import { ViewFilterDTO } from 'src/engine/metadata-modules/view-filter/dtos/view-filter.dto';
 import { ViewFilterService } from 'src/engine/metadata-modules/view-filter/services/view-filter.service';
-import { CreateViewFilterPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/create-view-filter-permission.guard';
-import { DeleteViewFilterPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/delete-view-filter-permission.guard';
-import { DestroyViewFilterPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/destroy-view-filter-permission.guard';
-import { UpdateViewFilterPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/update-view-filter-permission.guard';
 import { ViewGraphqlApiExceptionFilter } from 'src/engine/metadata-modules/view/utils/view-graphql-api-exception.filter';
+import { CreateViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view/guards/create-view-child-entity-permission.guard';
+import { ViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view/guards/view-child-entity-permission.guard';
+import { AuthGraphqlApiExceptionFilter } from 'src/engine/core-modules/auth/filters/auth-graphql-api-exception.filter';
+import { VIEW_FILTER_ACCESS_POLICY } from 'src/engine/metadata-modules/view-filter/constants/view-filter-access-policy.constant';
+import { AccessPolicyGuard } from 'src/engine/guards/access-policy.guard';
 
 @MetadataResolver(() => ViewFilterDTO)
-@UseFilters(ViewGraphqlApiExceptionFilter)
-@UseGuards(WorkspaceAuthGuard)
+@UseFilters(ViewGraphqlApiExceptionFilter, AuthGraphqlApiExceptionFilter)
+@UseGuards(AccessPolicyGuard(VIEW_FILTER_ACCESS_POLICY))
 export class ViewFilterResolver {
   constructor(private readonly viewFilterService: ViewFilterService) {}
 
   @Query(() => [ViewFilterDTO])
-  @UseGuards(NoPermissionGuard)
   async getViewFilters(
     @AuthWorkspace() workspace: WorkspaceEntity,
+    @AuthUserWorkspaceId({ allowUndefined: true })
+    userWorkspaceId: string | undefined,
     @Args('viewId', { type: () => String, nullable: true })
     viewId?: string,
   ): Promise<ViewFilterDTO[]> {
     if (viewId) {
-      return this.viewFilterService.findByViewId(workspace.id, viewId);
+      return this.viewFilterService.findByViewId({
+        workspaceId: workspace.id,
+        viewId,
+        userWorkspaceId,
+      });
     }
 
-    return this.viewFilterService.findByWorkspaceId(workspace.id);
+    return this.viewFilterService.findByWorkspaceId({
+      workspaceId: workspace.id,
+      userWorkspaceId,
+    });
   }
 
   @Query(() => ViewFilterDTO, { nullable: true })
-  @UseGuards(NoPermissionGuard)
   async getViewFilter(
     @Args('id', { type: () => String }) id: string,
     @AuthWorkspace() workspace: WorkspaceEntity,
-  ): Promise<ViewFilterDTO | null> {
-    return this.viewFilterService.findById(id, workspace.id);
+    @AuthUserWorkspaceId({ allowUndefined: true })
+    userWorkspaceId: string | undefined,
+  ): Promise<ViewFilterDTO> {
+    return this.viewFilterService.findByIdOrThrow({
+      id,
+      workspaceId: workspace.id,
+      userWorkspaceId,
+    });
   }
 
   @Mutation(() => ViewFilterDTO)
-  @UseGuards(CreateViewFilterPermissionGuard)
+  @UseGuards(CreateViewChildEntityPermissionGuard)
   async createViewFilter(
     @Args('input') createViewFilterInput: CreateViewFilterInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
@@ -60,7 +73,7 @@ export class ViewFilterResolver {
   }
 
   @Mutation(() => ViewFilterDTO)
-  @UseGuards(UpdateViewFilterPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewFilter'))
   async updateViewFilter(
     @Args('input') updateViewFilterInput: UpdateViewFilterInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
@@ -72,7 +85,7 @@ export class ViewFilterResolver {
   }
 
   @Mutation(() => ViewFilterDTO)
-  @UseGuards(DeleteViewFilterPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewFilter'))
   async deleteViewFilter(
     @Args('input') deleteViewFilterInput: DeleteViewFilterInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
@@ -84,7 +97,7 @@ export class ViewFilterResolver {
   }
 
   @Mutation(() => ViewFilterDTO)
-  @UseGuards(DestroyViewFilterPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewFilter'))
   async destroyViewFilter(
     @Args('input') destroyViewFilterInput: DestroyViewFilterInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,

@@ -1,10 +1,18 @@
+import { ToolCategory } from 'twenty-shared/ai';
+import { FeatureFlagKey, NavigationMenuItemType } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
 import { z } from 'zod';
 
+import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
+import { DefineTool } from 'src/engine/core-modules/tool-provider/decorators/define-tool.decorator';
+import { BaseTool } from 'src/engine/core-modules/tool-provider/interfaces/base-tool.interface';
+import { type ToolExecuteArgs } from 'src/engine/core-modules/tool-provider/types/tool-execute-args.type';
+import { type ToolOutput } from 'src/engine/core-modules/tool/types/tool-output.type';
+import { NAVIGATION_MENU_ITEM_WRITE_ACCESS_POLICY } from 'src/engine/metadata-modules/navigation-menu-item/constants/navigation-menu-item-write-access-policy.constant';
 import { type UpdateNavigationMenuItemInput } from 'src/engine/metadata-modules/navigation-menu-item/dtos/update-navigation-menu-item.input';
-import { type NavigationMenuItemToolContext } from 'src/engine/metadata-modules/navigation-menu-item/tools/types/navigation-menu-item-tool-context.type';
-import { type NavigationMenuItemToolDependencies } from 'src/engine/metadata-modules/navigation-menu-item/tools/types/navigation-menu-item-tool-dependencies.type';
+import { NavigationMenuItemService } from 'src/engine/metadata-modules/navigation-menu-item/navigation-menu-item.service';
 
-const updateNavigationMenuItemSchema = z.object({
+const updateNavigationMenuItemInputSchema = z.object({
   id: z.uuid().describe('Id of the navigation menu item to update'),
   name: z
     .string()
@@ -17,12 +25,12 @@ const updateNavigationMenuItemSchema = z.object({
   icon: z.string().optional().describe('New icon identifier'),
   color: z.string().optional().describe('New hex colour'),
   position: z.number().optional().describe('New position among siblings'),
-  folderId: z
+  parentId: z
     .string()
     .nullable()
     .optional()
     .describe(
-      'Move into a different folder. Pass null to move to the top level.',
+      'Move into a different folder, section or tab. Pass null to move to the top level (Home).',
     ),
   link: z
     .string()
@@ -35,36 +43,85 @@ const updateNavigationMenuItemSchema = z.object({
     .describe('New page layout id (only meaningful for PAGE_LAYOUT items)'),
 });
 
-type UpdateNavigationMenuItemParams = z.infer<
-  typeof updateNavigationMenuItemSchema
->;
+@DefineTool({
+  name: 'update_navigation_menu_item',
+  isDestructive: true,
+  category: ToolCategory.NAVIGATION_MENU_ITEM,
+  accessPolicy: NAVIGATION_MENU_ITEM_WRITE_ACCESS_POLICY,
+  description: `Update a navigation menu item (rename, recolor, move between folders, sections and tabs, reorder). Type and target ids are immutable — delete and recreate to convert one variant into another.`,
+})
+export class UpdateNavigationMenuItemTool extends BaseTool<
+  typeof updateNavigationMenuItemInputSchema
+> {
+  readonly inputSchema = updateNavigationMenuItemInputSchema;
 
-export const createUpdateNavigationMenuItemTool = (
-  deps: Pick<NavigationMenuItemToolDependencies, 'navigationMenuItemService'>,
-  context: NavigationMenuItemToolContext,
-) => ({
-  name: 'update_navigation_menu_item' as const,
-  description: `Update a navigation menu item (rename, recolor, move between folders, reorder). Type and target ids are immutable — delete and recreate to convert one variant into another.`,
-  inputSchema: updateNavigationMenuItemSchema,
-  execute: async (parameters: UpdateNavigationMenuItemParams) => {
+  constructor(
+    private readonly navigationMenuItemService: NavigationMenuItemService,
+    private readonly featureFlagService: FeatureFlagService,
+  ) {
+    super();
+  }
+
+  async execute({
+    input,
+    context: { workspaceId, userWorkspaceId },
+  }: ToolExecuteArgs<
+    typeof updateNavigationMenuItemInputSchema
+  >): Promise<ToolOutput> {
     try {
       const update: Partial<UpdateNavigationMenuItemInput> = {};
 
-      if (parameters.name !== undefined) update.name = parameters.name;
-      if (parameters.icon !== undefined) update.icon = parameters.icon;
-      if (parameters.color !== undefined) update.color = parameters.color;
-      if (parameters.position !== undefined)
-        update.position = parameters.position;
-      if (parameters.folderId !== undefined)
-        update.folderId = parameters.folderId;
-      if (parameters.link !== undefined) update.link = parameters.link;
-      if (parameters.pageLayoutId !== undefined)
-        update.pageLayoutId = parameters.pageLayoutId;
+      if (input.name !== undefined) {
+        update.name = input.name;
+      }
+      if (input.icon !== undefined) {
+        update.icon = input.icon;
+      }
+      if (input.color !== undefined) {
+        update.color = input.color;
+      }
+      if (input.position !== undefined) {
+        update.position = input.position;
+      }
+      if (input.parentId !== undefined) {
+        if (isDefined(input.parentId)) {
+          const parent = await this.navigationMenuItemService.findById({
+            id: input.parentId,
+            workspaceId,
+          });
+          const isParentTabOrSection =
+            parent?.type === NavigationMenuItemType.TAB ||
+            parent?.type === NavigationMenuItemType.SECTION;
 
-      const updated = await deps.navigationMenuItemService.update({
-        input: { id: parameters.id, ...update },
-        workspaceId: context.workspaceId,
-        authUserWorkspaceId: context.userWorkspaceId,
+          if (
+            isParentTabOrSection &&
+            !(await this.featureFlagService.isFeatureEnabled(
+              FeatureFlagKey.IS_CUSTOMIZABLE_SIDEBAR_ENABLED,
+              workspaceId,
+            ))
+          ) {
+            return {
+              success: false,
+              message:
+                'Moving an item into a tab or a section needs the customizable sidebar to be enabled.',
+              error: 'customizable_sidebar_disabled',
+            };
+          }
+        }
+
+        update.parentId = input.parentId;
+      }
+      if (input.link !== undefined) {
+        update.link = input.link;
+      }
+      if (input.pageLayoutId !== undefined) {
+        update.pageLayoutId = input.pageLayoutId;
+      }
+
+      const updated = await this.navigationMenuItemService.update({
+        input: { id: input.id, ...update },
+        workspaceId,
+        authUserWorkspaceId: userWorkspaceId,
       });
 
       return {
@@ -74,7 +131,7 @@ export const createUpdateNavigationMenuItemTool = (
           id: updated.id,
           type: updated.type,
           name: updated.name,
-          folderId: updated.folderId,
+          parentId: updated.parentId,
           position: updated.position,
         },
       };
@@ -87,5 +144,5 @@ export const createUpdateNavigationMenuItemTool = (
         error: message,
       };
     }
-  },
-});
+  }
+}

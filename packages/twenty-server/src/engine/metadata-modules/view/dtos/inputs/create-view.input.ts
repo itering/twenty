@@ -12,6 +12,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { DEFAULT_VIEW_GROUP_LOAD_LIMIT } from 'twenty-shared/constants';
 import {
   AggregateOperations,
   ViewCalendarLayout,
@@ -73,11 +74,23 @@ export class CreateViewInput {
   shouldHideEmptyGroups?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  @Field({ nullable: true, defaultValue: false })
+  shouldDisplayGroupsAsTabs?: boolean;
+
+  @IsOptional()
   @IsInt()
   @Min(KANBAN_COLUMN_MIN_WIDTH)
   @Max(KANBAN_COLUMN_MAX_WIDTH)
   @Field(() => Int, { nullable: true })
   kanbanColumnWidth?: number;
+
+  @IsOptional()
+  @Field(() => Int, {
+    nullable: true,
+    defaultValue: DEFAULT_VIEW_GROUP_LOAD_LIMIT,
+  })
+  groupLoadLimit?: number;
 
   @IsOptional()
   @IsEnum(ViewOpenRecordIn)

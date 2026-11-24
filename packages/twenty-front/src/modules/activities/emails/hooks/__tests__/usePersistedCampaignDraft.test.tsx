@@ -1,16 +1,25 @@
 import { act, renderHook } from '@testing-library/react';
 
+import { PREVIEW_MESSAGE_CAMPAIGN_SEND } from '@/activities/emails/graphql/metadata-queries/previewMessageCampaignSend';
 import { usePersistedCampaignDraft } from '@/activities/emails/hooks/usePersistedCampaignDraft';
 
 const mockUpdateOneRecord = jest.fn().mockResolvedValue({});
-const mockEnqueueErrorSnackBar = jest.fn();
 
 jest.mock('@/object-record/hooks/useUpdateOneRecord', () => ({
   useUpdateOneRecord: () => ({ updateOneRecord: mockUpdateOneRecord }),
 }));
 
-jest.mock('@/ui/feedback/snack-bar-manager/hooks/useSnackBar', () => ({
-  useSnackBar: () => ({ enqueueErrorSnackBar: mockEnqueueErrorSnackBar }),
+const mockRefetchQueries = jest.fn().mockResolvedValue([]);
+
+jest.mock('@apollo/client/react', () => ({
+  useApolloClient: () => ({ refetchQueries: mockRefetchQueries }),
+}));
+
+const mockEnqueueToast = jest.fn();
+
+jest.mock('twenty-ui/components/feedback', () => ({
+  ...jest.requireActual('twenty-ui/components/feedback'),
+  useToast: () => ({ enqueueToast: mockEnqueueToast }),
 }));
 
 const campaignId = '20202020-0000-4000-8000-000000000001';
@@ -71,6 +80,40 @@ describe('usePersistedCampaignDraft', () => {
 
     expect(result.current.draft.subject).toBe('Typed locally');
     expect(result.current.draftResyncKey).toBe(resyncKeyBeforeEcho);
+  });
+
+  it('should refresh the send preview once a save lands, and not when it fails', async () => {
+    const { result } = renderDraftHook('');
+
+    act(() => {
+      result.current.updateDraft({ subject: 'Typed locally' });
+    });
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+    });
+
+    expect(mockRefetchQueries).toHaveBeenCalledTimes(1);
+    expect(mockRefetchQueries).toHaveBeenCalledWith({
+      include: [PREVIEW_MESSAGE_CAMPAIGN_SEND],
+    });
+
+    mockRefetchQueries.mockClear();
+    mockUpdateOneRecord.mockRejectedValueOnce(new Error('Save failed'));
+
+    act(() => {
+      result.current.updateDraft({ subject: 'Typed again' });
+    });
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+    });
+
+    expect(mockRefetchQueries).not.toHaveBeenCalled();
+    expect(mockEnqueueToast).toHaveBeenCalledTimes(1);
+    expect(mockEnqueueToast).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'error' }),
+    );
   });
 
   it('should let unsaved local edits win over a concurrent remote change', () => {

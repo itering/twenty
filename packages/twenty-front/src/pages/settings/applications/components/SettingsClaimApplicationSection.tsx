@@ -1,8 +1,9 @@
 import { ApplicationDisplay } from '@/applications/components/ApplicationDisplay';
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
+import { useHasPermissionFlag } from '@/settings/roles/hooks/useHasPermissionFlag';
 import { getDocumentationUrl } from '@/support/utils/getDocumentationUrl';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
+import { TooltipDelay } from '@/ui/layout/tooltip/constants/TooltipDelay';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { useLazyQuery, useMutation } from '@apollo/client/react';
 import { styled } from '@linaria/react';
@@ -17,20 +18,20 @@ import {
 } from 'react-router-dom';
 import { SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath, isDefined } from 'twenty-shared/utils';
-import { Callout } from 'twenty-ui/feedback';
+import { Callout, useToast } from 'twenty-ui/components/feedback';
+import { Section } from 'twenty-ui/components/layout';
 import { IconBrandGithub, IconRefresh, IconSearch } from 'twenty-ui/icon';
-import { Button } from 'twenty-ui/input';
-import { Section } from 'twenty-ui/layout';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
-import { H2Title } from 'twenty-ui/typography';
+import { Button } from 'twenty-ui/primitives/input';
+import { Tooltip } from 'twenty-ui/primitives/surfaces';
+import { themeCssVariables } from 'twenty-ui/theme';
 import {
   FindClaimableApplicationRegistrationDocument,
   GithubClaimAuthorizationUrlDocument,
   PermissionFlagType,
   SyncMarketplaceCatalogDocument,
 } from '~/generated-metadata/graphql';
-import { useHasPermissionFlag } from '@/settings/roles/hooks/useHasPermissionFlag';
 import { getClaimErrorContent } from '~/pages/settings/applications/utils/getClaimErrorContent';
+import { openUrlInNewTab } from '~/utils/openUrlInNewTab';
 
 export const CLAIM_ERROR_CODE_SEARCH_PARAM = 'claimErrorCode';
 
@@ -75,15 +76,11 @@ const StyledHint = styled.div`
 
 const StyledCalloutContainer = styled.div`
   margin-bottom: ${themeCssVariables.spacing[3]};
-
-  & > div {
-    max-width: 100%;
-  }
 `;
 
 export const SettingsClaimApplicationSection = () => {
   const { t } = useLingui();
-  const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
+  const { enqueueToast } = useToast();
 
   const currentWorkspaceMember = useAtomStateValue(currentWorkspaceMemberState);
   const [searchParams] = useSearchParams();
@@ -150,8 +147,9 @@ export const SettingsClaimApplicationSection = () => {
         setNotFound(true);
       }
     } catch (error) {
-      enqueueErrorSnackBar({
-        message:
+      enqueueToast({
+        status: 'error',
+        children:
           error instanceof Error ? error.message : t`Could not run the lookup`,
       });
     }
@@ -170,13 +168,14 @@ export const SettingsClaimApplicationSection = () => {
       const authorizationUrl = result.data?.githubClaimAuthorizationUrl;
 
       if (!isDefined(authorizationUrl)) {
-        throw new Error(result.error?.message ?? 'Missing authorization URL');
+        throw new Error(result.error?.message ?? t`Missing authorization URL`);
       }
 
       window.location.href = authorizationUrl;
     } catch (error) {
-      enqueueErrorSnackBar({
-        message:
+      enqueueToast({
+        status: 'error',
+        children:
           error instanceof Error
             ? error.message
             : t`Could not start the GitHub claim`,
@@ -187,12 +186,14 @@ export const SettingsClaimApplicationSection = () => {
   const handleSync = async () => {
     try {
       await syncCatalog();
-      enqueueSuccessSnackBar({
-        message: t`Catalog sync started. Try your lookup again in a moment.`,
+      enqueueToast({
+        status: 'success',
+        children: t`Catalog sync started. Try your lookup again in a moment.`,
       });
     } catch (error) {
-      enqueueErrorSnackBar({
-        message:
+      enqueueToast({
+        status: 'error',
+        children:
           error instanceof Error
             ? error.message
             : t`Could not sync the catalog`,
@@ -217,30 +218,33 @@ export const SettingsClaimApplicationSection = () => {
   );
 
   return (
-    <Section>
-      <H2Title
+    <Section.Root>
+      <Section.Header
         title={t`Claim an application`}
         description={t`Take ownership of an app you published to npm. Enter its exact package name (or universal identifier) to find it.`}
       />
       {isDefined(claimError) && (
         <StyledCalloutContainer>
           <Callout
-            variant="error"
+            fullWidth
+            status="error"
             title={t`Could not claim this application`}
             description={i18n._(claimError.message)}
-            action={{
-              label: t`Read documentation`,
-              onClick: () =>
-                window.open(
-                  getDocumentationUrl({
-                    locale: currentWorkspaceMember?.locale,
-                    path: claimError.docPath,
-                  }),
-                  '_blank',
-                ),
-            }}
-            isClosable
-            onClose={dismissClaimError}
+            action={
+              <Callout.Action
+                type="button"
+                onClick={() =>
+                  openUrlInNewTab(
+                    getDocumentationUrl({
+                      locale: currentWorkspaceMember?.locale,
+                      path: claimError.docPath,
+                    }),
+                  )
+                }
+              >{t`Read documentation`}</Callout.Action>
+            }
+            closeLabel={t`Close`}
+            onDismiss={dismissClaimError}
           />
         </StyledCalloutContainer>
       )}
@@ -255,21 +259,28 @@ export const SettingsClaimApplicationSection = () => {
             label={t`Package name or universal identifier`}
           />
         </StyledInputContainer>
+        {canSyncCatalog && (
+          <Tooltip
+            content={t`Sync catalog`}
+            delay={TooltipDelay.shortDelay}
+            side="top"
+          >
+            <span>
+              <Button
+                startIcon={<IconRefresh />}
+                aria-label={t`Sync catalog`}
+                onClick={handleSync}
+                disabled={isSyncing}
+                variant="outline"
+              />
+            </span>
+          </Tooltip>
+        )}
         <Button
-          title={t`Look up`}
-          Icon={IconSearch}
+          startIcon={<IconSearch />}
           onClick={handleLookup}
           disabled={isLookingUp || lookupValue.trim().length === 0}
-        />
-        {canSyncCatalog && (
-          <Button
-            title={t`Sync catalog`}
-            variant="secondary"
-            Icon={IconRefresh}
-            onClick={handleSync}
-            disabled={isSyncing}
-          />
-        )}
+        >{t`Look up`}</Button>
       </StyledRow>
 
       {notFound && (
@@ -298,15 +309,15 @@ export const SettingsClaimApplicationSection = () => {
           </StyledHint>
           <StyledRow>
             <Button
-              title={t`Claim with GitHub`}
-              Icon={IconBrandGithub}
-              accent="blue"
+              startIcon={<IconBrandGithub />}
               onClick={handleClaimWithGithub}
               disabled={isRedirectingToGithub}
-            />
+              variant="solid"
+              color="accent"
+            >{t`Claim with GitHub`}</Button>
           </StyledRow>
         </StyledResultCard>
       )}
-    </Section>
+    </Section.Root>
   );
 };

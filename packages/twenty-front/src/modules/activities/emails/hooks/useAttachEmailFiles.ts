@@ -1,3 +1,4 @@
+import { atom, useStore } from 'jotai';
 import { type Dispatch, type SetStateAction, useState } from 'react';
 import { type EmailAttachment } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
@@ -15,6 +16,8 @@ export const useAttachEmailFiles = ({
   const { uploadEmailAttachment } = useUploadEmailAttachment();
   const { openFileUpload } = useFileUpload();
   const [pendingUploadCount, setPendingUploadCount] = useState(0);
+  const [uploadGenerationAtom] = useState(() => atom(0));
+  const store = useStore();
 
   const handleUploadFiles = async (filesToUpload: File[]) => {
     setPendingUploadCount((count) => count + 1);
@@ -27,19 +30,22 @@ export const useAttachEmailFiles = ({
   };
 
   const appendUploadedFiles = async (filesToUpload: File[]) => {
+    const uploadGeneration = store.get(uploadGenerationAtom);
+
     const uploadedFiles = await Promise.all(
       filesToUpload.map((file) => uploadEmailAttachment(file)),
     );
 
     const successfulUploads = uploadedFiles.filter(isDefined);
 
-    if (successfulUploads.length === 0) {
+    if (
+      successfulUploads.length === 0 ||
+      uploadGeneration !== store.get(uploadGenerationAtom)
+    ) {
       return;
     }
 
-    // Appended against the latest state rather than the list captured when the
-    // picker opened: an upload can finish after the user has removed or added
-    // other attachments.
+    // An upload can finish after the user changed the attachments, so append to the latest state.
     onFilesAttached((previousFiles) => [
       ...previousFiles,
       ...successfulUploads,
@@ -50,10 +56,14 @@ export const useAttachEmailFiles = ({
     openFileUpload({ multiple: true, onUpload: handleUploadFiles });
   };
 
-  // Attachments only join the draft once their upload resolves, so sending has
-  // to wait or the mail goes out without the file the user just picked.
+  const discardPendingUploads = () => {
+    store.set(uploadGenerationAtom, (uploadGeneration) => uploadGeneration + 1);
+  };
+
+  // Attachments join the draft only once uploaded, so sending must wait for them.
   return {
     openAttachmentPicker,
+    discardPendingUploads,
     isUploadingAttachments: pendingUploadCount > 0,
   };
 };

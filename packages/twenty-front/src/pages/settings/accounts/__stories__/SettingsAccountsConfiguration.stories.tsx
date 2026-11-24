@@ -1,0 +1,84 @@
+import { type Meta, type StoryObj } from '@storybook/react-vite';
+import { HttpResponse, graphql } from 'msw';
+import { expect, userEvent, within } from 'storybook/test';
+
+import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
+import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
+import { jotaiStore } from '@/ui/utilities/state/jotai/jotaiStore';
+import {
+  PageDecorator,
+  type PageDecoratorArgs,
+} from '~/testing/decorators/PageDecorator';
+
+import { SettingsAccountsConfiguration } from '~/pages/settings/accounts/SettingsAccountsConfiguration';
+import {
+  ACCOUNT_GROUPS_GRAPHQL_HANDLERS,
+  GOOGLE_ACCOUNT_ID,
+  seedAccountGroupsStory,
+} from '~/pages/settings/accounts/__stories__/mockedAccountGroups';
+import { mockedUserData } from '~/testing/mock-data/users';
+
+const meta: Meta<PageDecoratorArgs> = {
+  title: 'Pages/Settings/Accounts/SettingsAccountsConfiguration',
+  component: SettingsAccountsConfiguration,
+  decorators: [PageDecorator],
+  args: {
+    routePath:
+      '/settings/app-preferences/accounts/:connectedAccountId/configuration',
+    routeParams: { ':connectedAccountId': GOOGLE_ACCOUNT_ID },
+    additionalRoutes: ['/settings/app-preferences/google'],
+  },
+  beforeEach: seedAccountGroupsStory,
+  parameters: {
+    layout: 'fullscreen',
+    msw: {
+      handlers: [
+        graphql.query('GetCurrentUser', () =>
+          HttpResponse.json({
+            data: {
+              currentUser: {
+                ...mockedUserData,
+                currentWorkspace: jotaiStore.get(currentWorkspaceState.atom),
+                workspaceMember: jotaiStore.get(
+                  currentWorkspaceMemberState.atom,
+                ),
+              },
+            },
+          }),
+        ),
+        graphql.mutation('StartChannelSync', () =>
+          HttpResponse.json({
+            data: {
+              startChannelSync: {
+                __typename: 'ChannelSyncSuccess',
+                success: true,
+              },
+            },
+          }),
+        ),
+        ...ACCOUNT_GROUPS_GRAPHQL_HANDLERS,
+      ],
+    },
+  },
+};
+
+export default meta;
+
+export type Story = StoryObj<typeof SettingsAccountsConfiguration>;
+
+export const FinishedSetupOpensTheAppPage: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    await userEvent.click(
+      await canvas.findByRole('button', { name: 'Next' }, { timeout: 3000 }),
+    );
+    await userEvent.click(
+      await canvas.findByRole('button', { name: 'Finish Setup' }),
+    );
+
+    expect(
+      await canvas.findByText('Navigated to /settings/app-preferences/google'),
+    ).toBeVisible();
+  },
+};

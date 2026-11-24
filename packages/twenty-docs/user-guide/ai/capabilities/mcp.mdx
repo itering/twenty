@@ -3,6 +3,10 @@ title: MCP Server
 description: Connect AI assistants to your Twenty workspace using the Model Context Protocol.
 ---
 
+import { PageBanner } from "/snippets/page-banner.mdx"
+
+## Overview
+
 Twenty exposes an [MCP](https://modelcontextprotocol.io/) server so that AI assistants — Claude Desktop, Claude Code, Cursor, ChatGPT, and others — can read and write your CRM data through natural language.
 
 Use your **workspace URL** (the URL you use to access Twenty) as the MCP endpoint. On Twenty Cloud, your workspace URL might be `https://{mycompany}.twenty.com` or a custom domain. The server is available at:
@@ -68,13 +72,13 @@ If your MCP client does not support OAuth, or you prefer static credentials, pas
 Your API key grants access to workspace data. Keep it out of version control and shared dotfiles.
 </Warning>
 
-To create an API key, go to **Settings → MCP & APIs → API → + Create key**. See [APIs](/developers/extend/api#create-an-api-key) for details.
+To create an API key, go to **Settings → Developers → API → + Create key**. See [APIs](/developers/extend/api#create-an-api-key) for details.
 
 ## Quick Start
 
 ### 1. Copy the config
 
-Go to **Settings → MCP & APIs → MCP** in Twenty. Choose your authentication method (OAuth or API Key), copy the JSON snippet (it will already use your workspace URL), and paste it into your MCP client's config file.
+Go to **Settings → AI → MCP** in Twenty. Choose your authentication method (OAuth or API Key), copy the JSON snippet (it will already use your workspace URL), and paste it into your MCP client's config file.
 
 | Client | Config file location |
 |--------|---------------------|
@@ -97,12 +101,36 @@ Ask your AI assistant to interact with your CRM:
 
 ## Available Tools
 
-Once connected, the MCP server exposes tools that mirror the Twenty API. The recommended workflow is:
+Once connected, the MCP server lists the same tools in every workspace:
+
+- **Record tools** take the object as an argument: `find_records`, `group_records`, `create_records`, `update_record`, `update_records`, `upsert_records`, `delete_records` and `merge_records`. For example, `find_records({ objectName: "company", select: ["name"] })`.
+- **Discovery tools** tell the assistant what your workspace contains: `list_object_metadata_names` for objects and `get_field_metadata` for the fields of an object.
+- **Metadata tools** to read and change the data model, such as `get_object_metadata` or `create_field_metadata`.
+- **Every other built-in tool**, each listed with its input schema: workflows, dashboards, views, navigation, webhooks, roles, agents, front components, and email, calendar and file tools.
+- **Skills and help**: `list_skills`, `load_skills` and `search_help_center`.
+
+Because the list does not depend on your objects, it stays valid for clients that store it, such as apps published in a directory. Which of these tools you see still depends on your role.
+
+The functions of your installed apps and the tools of MCP servers you connected to Twenty differ per workspace, so this list leaves them out. Use direct mode to reach them.
+
+The list holds about a hundred tool definitions. Clients that load tools on demand, as Claude, Claude Code, Codex and ChatGPT do by default, handle it well. A client that loads every tool definition up front can use a large part of its context: connect it to meta mode instead.
+
+### Direct mode
+
+Connect to `/mcp?mode=direct` to list one tool per object and operation instead, each with the exact input schema of that object: `find_many_companies`, `create_one_person`, and several hundred more. Direct mode also lists the other built-in tools, the functions of your installed apps and the tools of your connected MCP servers. Tools for objects created while you are connected appear after reconnecting.
+
+This needs a client that loads tools on demand, as Claude, Claude Code, Codex and OpenCode do by default. A client that loads every tool definition up front, including Claude Code with tool search turned off, can run out of context.
+
+### Meta mode
+
+Connect to `/mcp?mode=meta` to list only a few meta-tools, which reach every tool, including app functions and connected MCP servers:
 
 1. **`learn_tools`** — get the input schema for specific tools
 2. **`execute_tool`** — run a tool
 
-You don't need to remember tool names. Ask your AI assistant what it can do and it will call `learn_tools` automatically.
+Record operation names follow a grammar, so an assistant can build them without a discovery call: `find_many_companies`, `find_one_person`, `update_one_opportunity`. If a name is wrong, `learn_tools` reports it under `notFound` along with the closest matching names.
+
+For anything else, `get_tool_catalog` browses the remaining tools one category at a time. It is a fallback: an unfiltered call returns hundreds of operations and most assistants will truncate the response.
 
 ## Permissions
 
@@ -132,3 +160,5 @@ The MCP endpoint, OAuth endpoints, and discovery metadata all derive from this v
 
 **Connection timeout**
 - Confirm the MCP endpoint URL is reachable from your machine. For self-hosted instances, check that the server is running and `SERVER_URL` is set correctly.
+
+<PageBanner illustration="card-page-mcp" />

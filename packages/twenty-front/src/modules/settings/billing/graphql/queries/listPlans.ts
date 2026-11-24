@@ -1,11 +1,14 @@
 import { gql } from '@apollo/client';
-import { BILLING_PRICE_METERED_FRAGMENT } from '@/settings/billing/graphql/fragments/billingPriceMeteredFragment';
 import { BILLING_PRICE_LICENSED_FRAGMENT } from '@/settings/billing/graphql/fragments/billingPriceLicensedFragment';
 
 export const LIST_PLANS = gql`
   query listPlans {
     listPlans {
       planKey
+      isSellable
+      isCheckoutDefault
+      upgradePlanKeys
+      downgradePlanKeys
       baseProducts {
         name
         description
@@ -13,7 +16,7 @@ export const LIST_PLANS = gql`
         metadata {
           productKey
           planKey
-          priceUsageBased
+          isLegacy
         }
         ... on BillingLicensedProduct {
           prices {
@@ -28,7 +31,7 @@ export const LIST_PLANS = gql`
         metadata {
           productKey
           planKey
-          priceUsageBased
+          isLegacy
         }
         ... on BillingLicensedProduct {
           prices {
@@ -36,23 +39,7 @@ export const LIST_PLANS = gql`
           }
         }
       }
-      meteredProducts {
-        name
-        description
-        images
-        metadata {
-          productKey
-          planKey
-          priceUsageBased
-        }
-        ... on BillingMeteredProduct {
-          prices {
-            ...BillingPriceMeteredFragment
-          }
-        }
-      }
     }
   }
   ${BILLING_PRICE_LICENSED_FRAGMENT}
-  ${BILLING_PRICE_METERED_FRAGMENT}
 `;

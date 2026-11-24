@@ -1,25 +1,23 @@
+import { type RefObject } from 'react';
+import { Dropdown } from 'twenty-ui/components/navigation';
 import { useLingui } from '@lingui/react/macro';
-import { isDefined } from 'twenty-shared/utils';
-import { Avatar } from 'twenty-ui/data-display';
 
+import { EmailRecipientChip } from '@/activities/emails/recipients/components/EmailRecipientChip';
 import { EmailRecipientChipMenuContent } from '@/activities/emails/recipients/components/EmailRecipientChipMenuContent';
 import { type EmailRecipientResolution } from '@/activities/emails/recipients/hooks/useEmailRecipientsResolution';
 import { type EmailRecipient } from '@/activities/emails/recipients/types/EmailRecipient';
 import { formatEmailRecipient } from '@/activities/emails/recipients/utils/formatEmailRecipient';
-import { getEmailIdentityDisplayName } from '@/activities/emails/utils/getEmailIdentityDisplayName';
-import { BaseChip } from '@/ui/input/components/BaseChip';
-import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
-import { getAbsoluteImageUrl } from '~/utils/image/getAbsoluteImageUrl';
-
-const CHIP_MAX_WIDTH = 240;
+import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
+import { DropdownRoot } from '@/ui/layout/dropdown/components/DropdownRoot';
 
 type EmailRecipientsFieldChipProps = {
   chipId: string;
   dropdownId: string;
+  inputRef: RefObject<HTMLInputElement | null>;
   recipient: EmailRecipient;
   resolution: EmailRecipientResolution | undefined;
   isInvalid: boolean;
-  selected: boolean;
+  isSelected: boolean;
   isFlashing: boolean;
   onEdit: () => void;
   onRemove: () => void;
@@ -28,82 +26,54 @@ type EmailRecipientsFieldChipProps = {
 export const EmailRecipientsFieldChip = ({
   chipId,
   dropdownId,
+  inputRef,
   recipient,
   resolution,
   isInvalid,
-  selected,
+  isSelected,
   isFlashing,
   onEdit,
   onRemove,
 }: EmailRecipientsFieldChipProps) => {
   const { t } = useLingui();
 
-  const workspaceMember = resolution?.workspaceMember;
-  const person = resolution?.person;
-
-  const workspaceMemberFullName = isDefined(workspaceMember)
-    ? `${workspaceMember.name.firstName} ${workspaceMember.name.lastName}`.trim()
-    : '';
-  const personFullName = isDefined(person)
-    ? `${person.firstName} ${person.lastName}`.trim()
-    : '';
-
-  const resolvedLabel = getEmailIdentityDisplayName({
-    personName: personFullName,
-    workspaceMemberName: workspaceMemberFullName,
-    displayName: recipient.displayName,
-    handle: recipient.address,
-  });
-
-  const avatar =
-    isDefined(workspaceMember) || isDefined(person) ? (
-      <Avatar
-        avatarUrl={getAbsoluteImageUrl(
-          workspaceMember?.avatarUrl ?? person?.avatarUrl,
-        )}
-        placeholder={resolvedLabel}
-        placeholderColorSeed={workspaceMember?.id ?? person?.id}
-        size="sm"
-        type="rounded"
-      />
-    ) : undefined;
-
   return (
-    <Dropdown
-      dropdownId={dropdownId}
-      dropdownPlacement="bottom-start"
-      clickableComponent={
-        <BaseChip
+    <DropdownRoot dropdownId={dropdownId} type="menu">
+      <Dropdown.Trigger render={<div />} nativeButton={false} tabIndex={-1}>
+        <EmailRecipientChip
           chipId={chipId}
-          label={resolvedLabel}
+          recipient={recipient}
+          resolution={resolution}
           title={
             isInvalid
               ? t`Invalid email address`
               : formatEmailRecipient(recipient)
           }
-          leftIcon={avatar}
-          danger={isInvalid}
-          selected={selected}
+          isInvalid={isInvalid}
+          isSelected={isSelected}
           isFlashing={isFlashing}
           onDoubleClick={onEdit}
-          maxWidth={CHIP_MAX_WIDTH}
           onRemove={(event) => {
             event.stopPropagation();
             onRemove();
           }}
           removeAriaLabel={t`Remove ${recipient.address}`}
         />
-      }
-      dropdownComponents={
+      </Dropdown.Trigger>
+      <DropdownContent
+        align="start"
+        width={280}
+        initialFocus={false}
+        finalFocus={inputRef}
+      >
         <EmailRecipientChipMenuContent
-          dropdownId={dropdownId}
           recipient={recipient}
           resolution={resolution}
           isInvalid={isInvalid}
           onEdit={onEdit}
           onRemove={onRemove}
         />
-      }
-    />
+      </DropdownContent>
+    </DropdownRoot>
   );
 };

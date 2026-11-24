@@ -37,9 +37,6 @@ describe('defineConnectionProvider', () => {
   });
 
   it('rejects a non-UUID universalIdentifier', () => {
-    // Catches the most common mistake: copy-pasting a slug or generated id
-    // string instead of running `uuidgen`. Server-side throws too — this
-    // arm of the check just shifts the error to `twenty deploy` time.
     const result = defineConnectionProvider({
       ...baseValidConfig,
       universalIdentifier: 'linear-provider',
@@ -83,7 +80,27 @@ describe('defineConnectionProvider', () => {
     expect(result.success).toBe(false);
   });
 
+  it.each(['WORKSPACE', 'USER'] as const)('accepts the %s scope', (scope) => {
+    const result = defineConnectionProvider({ ...baseValidConfig, scope });
+
+    expect(result.success).toBe(true);
+    expect(result.config.scope).toBe(scope);
+  });
+
+  it('rejects an unknown scope', () => {
+    const result = defineConnectionProvider({
+      ...baseValidConfig,
+      scope: 'WORKSPACE_MEMBER' as never,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.errors).toContain(
+      'Connection provider scope must be one of WORKSPACE, USER',
+    );
+  });
+
   const lifecycleHookKeys = [
+    'identifyAccountLogicFunction',
     'onConnectLogicFunction',
     'onDisconnectLogicFunction',
   ] as const;
@@ -114,4 +131,123 @@ describe('defineConnectionProvider', () => {
       ).toBe(true);
     },
   );
+
+  describe('oauth-discovery type', () => {
+    const baseOAuthDiscoveryConfig = {
+      universalIdentifier: '99fcd8e8-fbb1-4d2c-bc16-7c61ef3ebbbc',
+      name: 'linear-mcp',
+      displayName: 'Linear MCP',
+      type: 'oauth-discovery' as const,
+      oauthDiscovery: { resourceUrl: 'https://mcp.linear.app/mcp' },
+    };
+
+    it('returns success for a valid config', () => {
+      const result = defineConnectionProvider(baseOAuthDiscoveryConfig);
+
+      expect(result.success).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('rejects a resource URL that is not HTTP', () => {
+      const result = defineConnectionProvider({
+        ...baseOAuthDiscoveryConfig,
+        oauthDiscovery: { resourceUrl: 'mcp.linear.app' },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errors).toEqual([
+        "Connection provider with type 'oauth-discovery' must declare oauthDiscovery.resourceUrl as an HTTP or HTTPS URL",
+      ]);
+    });
+  });
+
+  describe('custom type', () => {
+    const baseCustomConfig = {
+      universalIdentifier: '99fcd8e8-fbb1-4d2c-bc16-7c61ef3ebbbb',
+      name: 'linkedin',
+      displayName: 'LinkedIn',
+      type: 'custom' as const,
+      custom: {
+        authorizeLogicFunction: {
+          universalIdentifier: 'b648f87b-1d26-4961-b974-0908fd991061',
+        },
+        callbackLogicFunction: {
+          universalIdentifier: 'b648f87b-1d26-4961-b974-0908fd991062',
+        },
+      },
+    };
+
+    it('returns success for a valid config', () => {
+      const result = defineConnectionProvider(baseCustomConfig);
+
+      expect(result.success).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('reports a missing custom config block', () => {
+      const result = defineConnectionProvider({
+        ...baseCustomConfig,
+        custom: undefined as never,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errors).toContain(
+        "Connection provider with type 'custom' must declare a `custom` config block",
+      );
+    });
+
+    it.each(['authorizeLogicFunction', 'callbackLogicFunction'] as const)(
+      'reports a missing custom.%s',
+      (logicFunctionKey) => {
+        const result = defineConnectionProvider({
+          ...baseCustomConfig,
+          custom: {
+            ...baseCustomConfig.custom,
+            [logicFunctionKey]: undefined as never,
+          },
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.errors).toContain(
+          `Custom connection provider must declare custom.${logicFunctionKey}`,
+        );
+      },
+    );
+
+    it('rejects a non-UUID logic function reference', () => {
+      const result = defineConnectionProvider({
+        ...baseCustomConfig,
+        custom: {
+          ...baseCustomConfig.custom,
+          callbackLogicFunction: { universalIdentifier: 'linkedin-callback' },
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expect(
+        result.errors.some((error) =>
+          error.includes('custom.callbackLogicFunction.universalIdentifier'),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe('api-key type', () => {
+    const baseApiKeyConfig = {
+      universalIdentifier: '99fcd8e8-fbb1-4d2c-bc16-7c61ef3ecccc',
+      name: 'front',
+      displayName: 'Front',
+      type: 'api-key' as const,
+      identifyAccountLogicFunction: {
+        universalIdentifier: 'b648f87b-1d26-4961-b974-0908fd991063',
+      },
+    };
+
+    it('returns success for a valid config', () => {
+      const result = defineConnectionProvider(baseApiKeyConfig);
+
+      expect(result.success).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+  });
 });

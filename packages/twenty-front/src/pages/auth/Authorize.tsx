@@ -1,29 +1,39 @@
+import { StyledAuthContent } from '@/auth/components/StyledAuthContent';
 import { styled } from '@linaria/react';
-import { useContext, useEffect, useState } from 'react';
+import { isNonEmptyString } from '@sniptt/guards';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Key } from 'ts-key-enum';
 import { AppPath } from 'twenty-shared/types';
 
 import { AppConnectionHeader } from '@/applications/components/AppConnectionHeader';
 import { AuthorizeActionButtons } from '@/applications/components/AuthorizeActionButtons';
+import { AuthorizeClientIdentityNotice } from '@/applications/components/AuthorizeClientIdentityNotice';
+import { getKnownOAuthClientLogoUrl } from '@/applications/utils/getKnownOAuthClientLogoUrl';
+import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
 import { useRedirect } from '@/domain-manager/hooks/useRedirect';
 import { useGlobalHotkeys } from '@/ui/utilities/hotkey/hooks/useGlobalHotkeys';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { useMutation, useQuery } from '@apollo/client/react';
-import { isDefined } from 'twenty-shared/utils';
+import { getUrlSafely, isDefined } from 'twenty-shared/utils';
 import {
   type IconComponent,
   IconDatabase,
   IconUserCircle,
 } from 'twenty-ui/icon';
-import { H1Title, H1TitleFontColor } from 'twenty-ui/typography';
-import { ModalContent } from 'twenty-ui/surfaces';
-import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
+import { Heading } from 'twenty-ui/primitives/typography';
+import {
+  useTheme,
+  useThemeColorScheme,
+  themeCssVariables,
+} from 'twenty-ui/theme';
 import {
   AuthorizeAppDocument,
   FindApplicationRegistrationByClientIdDocument,
 } from '~/generated-metadata/graphql';
 import { useNavigateApp } from '~/hooks/useNavigateApp';
+import { getAbsoluteImageUrl } from '~/utils/image/getAbsoluteImageUrl';
 
 const StyledCardWrapper = styled.div`
   --oauth-modal-content-max-width: calc(
@@ -57,8 +67,7 @@ const StyledHeader = styled.div`
   width: 100%;
 `;
 
-const StyledOAuthTitle = styled(H1Title)`
-  margin: 0;
+const StyledOAuthTitle = styled(Heading)`
   max-width: min(100%, var(--oauth-modal-content-max-width));
   padding-bottom: ${themeCssVariables.spacing[1]};
   text-wrap: balance;
@@ -120,6 +129,21 @@ const StyledScopeIcon = styled.div`
   justify-content: center;
 `;
 
+const StyledRedirectNotice = styled.p`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-family: ${themeCssVariables.font.family};
+  font-size: ${themeCssVariables.font.size.sm};
+  line-height: ${themeCssVariables.text.lineHeight.lg};
+  margin: ${themeCssVariables.spacing[6]} 0 0;
+  overflow-wrap: anywhere;
+  padding-left: ${themeCssVariables.spacing[1]};
+`;
+
+const StyledRedirectHost = styled.span`
+  color: ${themeCssVariables.font.color.primary};
+  font-weight: ${themeCssVariables.font.weight.medium};
+`;
+
 const StyledErrorText = styled.div`
   color: ${themeCssVariables.color.red};
   font-size: ${themeCssVariables.font.size.sm};
@@ -135,10 +159,12 @@ const OAUTH_SCOPE_ICONS: { [scope: string]: IconComponent | undefined } = {
 
 export const Authorize = () => {
   const { t } = useLingui();
-  const { theme, colorScheme } = useContext(ThemeContext);
+  const theme = useTheme();
+  const colorScheme = useThemeColorScheme();
   const navigate = useNavigateApp();
   const [searchParam] = useSearchParams();
   const { redirect } = useRedirect();
+  const currentWorkspace = useAtomStateValue(currentWorkspaceState);
 
   const oauthScopeLabels: { [scope: string]: string | undefined } = {
     api: t`Access your workspace data`,
@@ -152,6 +178,8 @@ export const Authorize = () => {
   const redirectUrl =
     searchParam.get('redirect_uri') ?? searchParam.get('redirectUrl');
   const state = searchParam.get('state');
+  const issuer = searchParam.get('iss');
+  const resource = searchParam.get('resource');
 
   const {
     data,
@@ -168,7 +196,9 @@ export const Authorize = () => {
   const [isAuthorizing, setIsAuthorizing] = useState(false);
 
   const shouldRedirectToNotFound =
-    !isDefined(clientId) || (!loading && !isDefined(applicationRegistration));
+    !isDefined(clientId) ||
+    !isDefined(redirectUrl) ||
+    (!loading && !isDefined(queryError) && !isDefined(applicationRegistration));
 
   useEffect(() => {
     if (shouldRedirectToNotFound) {
@@ -199,6 +229,8 @@ export const Authorize = () => {
           codeChallenge: codeChallenge ?? undefined,
           redirectUrl,
           state: state ?? undefined,
+          issuer: issuer ?? undefined,
+          resource: resource ?? undefined,
         },
         onCompleted: (responseData) => {
           redirect(appendThemeToUrl(responseData.authorizeApp.redirectUrl));
@@ -242,40 +274,63 @@ export const Authorize = () => {
 
   if (isDefined(queryError)) {
     return (
-      <ModalContent isVerticallyCentered isHorizontallyCentered>
+      <StyledAuthContent>
         <StyledCardWrapper>
-          <ModalContent contentPadding={10}>
-            <StyledOAuthTitle
-              title={<Trans>Something went wrong</Trans>}
-              fontColor={H1TitleFontColor.Primary}
-            />
+          <StyledAuthContent
+            style={{ alignItems: 'stretch', justifyContent: 'flex-start' }}
+          >
+            <StyledOAuthTitle level={2} size="lg">
+              <Trans>Something went wrong</Trans>
+            </StyledOAuthTitle>
             <StyledErrorText>
               {t`Unable to load application details. Please try again later.`}
             </StyledErrorText>
-          </ModalContent>
+          </StyledAuthContent>
         </StyledCardWrapper>
-      </ModalContent>
+      </StyledAuthContent>
     );
   }
 
-  if (loading || !applicationRegistration) {
+  if (loading || !applicationRegistration || !isDefined(redirectUrl)) {
     return null;
   }
 
   const appName = applicationRegistration.name;
-  const appLogoUrl = applicationRegistration.logoUrl;
   const requestedScopes: string[] = applicationRegistration.oAuthScopes ?? [];
+  const redirectHost = getUrlSafely(redirectUrl)?.host;
+  const appLogoUrl =
+    applicationRegistration.logoUrl ?? getKnownOAuthClientLogoUrl(redirectHost);
+  const workspaceName = currentWorkspace?.displayName;
 
   return (
-    <ModalContent isVerticallyCentered isHorizontallyCentered>
+    <StyledAuthContent>
       <StyledCardWrapper>
         <StyledHeader>
-          <AppConnectionHeader appLogoUrl={appLogoUrl} appName={appName} />
+          <AppConnectionHeader
+            appLogoUrl={appLogoUrl}
+            appName={appName}
+            workspaceLogoUrl={getAbsoluteImageUrl(currentWorkspace?.logo)}
+            workspaceName={workspaceName}
+          />
         </StyledHeader>
-        <ModalContent contentPadding={10}>
-          <StyledOAuthTitle
-            title={<Trans>Connect {appName} to your account</Trans>}
-            fontColor={H1TitleFontColor.Primary}
+        <StyledAuthContent
+          style={{ alignItems: 'stretch', justifyContent: 'flex-start' }}
+        >
+          <StyledOAuthTitle level={2} size="lg">
+            {isNonEmptyString(workspaceName) ? (
+              <Trans>
+                Connect {appName} to {workspaceName}
+              </Trans>
+            ) : (
+              <Trans>Connect {appName} to your account</Trans>
+            )}
+          </StyledOAuthTitle>
+          <AuthorizeClientIdentityNotice
+            appName={appName}
+            isVerified={applicationRegistration.isVerified}
+            isClaimingVerifiedClientName={
+              applicationRegistration.isClaimingVerifiedClientName
+            }
           />
           {requestedScopes.length > 0 && (
             <StyledPermissionSection>
@@ -301,6 +356,14 @@ export const Authorize = () => {
               </StyledScopeList>
             </StyledPermissionSection>
           )}
+          {isNonEmptyString(redirectHost) && (
+            <StyledRedirectNotice>
+              <Trans>
+                After you connect, you will be redirected to{' '}
+                <StyledRedirectHost>{redirectHost}</StyledRedirectHost>
+              </Trans>
+            </StyledRedirectNotice>
+          )}
           {authorizeError && (
             <StyledErrorText>{authorizeError}</StyledErrorText>
           )}
@@ -309,8 +372,8 @@ export const Authorize = () => {
             onAuthorize={handleAuthorize}
             isLoading={isAuthorizing}
           />
-        </ModalContent>
+        </StyledAuthContent>
       </StyledCardWrapper>
-    </ModalContent>
+    </StyledAuthContent>
   );
 };

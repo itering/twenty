@@ -1,14 +1,15 @@
-import jsonLogic, { type RulesLogic } from 'json-logic-js';
-import {
-  evaluateConditionalAvailabilityExpression,
-  isDefined,
-} from 'twenty-shared/utils';
+import jsonLogic, {
+  type AdditionalOperation,
+  type RulesLogic,
+} from 'json-logic-js';
+import { evaluateConditionalAvailabilityExpression } from 'twenty-shared/conditional-availability';
+import { isDefined } from 'twenty-shared/utils';
 
 import { type WidgetVisibilityContext } from '@/page-layout/types/WidgetVisibilityContext';
 
 type EvaluateWidgetVisibilityParams = {
   conditionalAvailabilityExpression: string | null | undefined;
-  conditionalDisplay: RulesLogic | undefined;
+  conditionalDisplay: RulesLogic<AdditionalOperation> | undefined;
   context: WidgetVisibilityContext;
 };
 

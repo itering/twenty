@@ -1,11 +1,10 @@
 import { activeTabIdComponentState } from '@/ui/layout/tab-list/states/activeTabIdComponentState';
+import { parseTabRouteHash } from '@/ui/layout/tab-list/utils/parseTabRouteHash';
 import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 import { useLocation } from 'react-router-dom';
 import { isDefined } from 'twenty-shared/utils';
 
-// Resolves the active tab synchronously so the content never renders a null/blank
-// frame before the effects settle: the URL hash if it points to a tab (so deep-links
-// win), else the stored tab if still valid, else the first tab.
+// Resolved synchronously so the content never renders a blank frame before effects settle
 export const useSettingsActiveTabId = (
   componentInstanceId: string,
   tabIds: string[],
@@ -16,7 +15,7 @@ export const useSettingsActiveTabId = (
   );
   const { hash } = useLocation();
 
-  const hashTabId = hash.replace('#', '');
+  const { tabId: hashTabId } = parseTabRouteHash(hash);
   if (tabIds.includes(hashTabId)) {
     return hashTabId;
   }

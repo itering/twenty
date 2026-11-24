@@ -52,6 +52,22 @@ describe('RestApiClient', () => {
     expect(requestInit.method).toBe('GET');
   });
 
+  it('should call the internal api url when the runtime provides one', async () => {
+    vi.stubGlobal('process', {
+      env: {
+        TWENTY_API_URL: 'https://api.twenty.test',
+        TWENTY_INTERNAL_API_URL: 'http://twenty-server:3000',
+        TWENTY_APP_ACCESS_TOKEN: 'app-access-token',
+      },
+    });
+    const fetchMock = vi.fn().mockResolvedValue(buildResponse('{}'));
+
+    await new RestApiClient({ fetch: fetchMock }).get('/rest/companies');
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://twenty-server:3000/rest/companies');
+  });
+
   it('should serialize a JSON body and set the content type on post', async () => {
     const fetchMock = vi.fn().mockResolvedValue(buildResponse('{}'));
 
@@ -92,6 +108,55 @@ describe('RestApiClient', () => {
       RestApiClientError,
     );
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('should act as the application when asked to', async () => {
+    (globalThis as Record<string, unknown>).process = {
+      env: {
+        TWENTY_API_URL: 'https://api.twenty.test',
+        TWENTY_APP_ACCESS_TOKEN: 'delegated-token',
+        TWENTY_APP_APPLICATION_ACCESS_TOKEN: 'application-token',
+      },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(buildResponse('{}'));
+
+    await new RestApiClient({ fetch: fetchMock, runAs: 'application' }).get(
+      '/rest/people',
+    );
+
+    expect(
+      (fetchMock.mock.calls[0][1].headers as Headers).get('Authorization'),
+    ).toBe('Bearer application-token');
+  });
+
+  it('should act as the triggering person by default', async () => {
+    (globalThis as Record<string, unknown>).process = {
+      env: {
+        TWENTY_API_URL: 'https://api.twenty.test',
+        TWENTY_APP_ACCESS_TOKEN: 'delegated-token',
+        TWENTY_APP_APPLICATION_ACCESS_TOKEN: 'application-token',
+      },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(buildResponse('{}'));
+
+    await new RestApiClient({ fetch: fetchMock }).get('/rest/people');
+
+    expect(
+      (fetchMock.mock.calls[0][1].headers as Headers).get('Authorization'),
+    ).toBe('Bearer delegated-token');
+  });
+
+  it('should name the application token when it is the one missing', async () => {
+    (globalThis as Record<string, unknown>).process = {
+      env: { TWENTY_API_URL: 'https://api.twenty.test' },
+    };
+
+    await expect(
+      new RestApiClient({
+        fetch: vi.fn(),
+        runAs: 'application',
+      }).get('/rest/people'),
+    ).rejects.toThrow(/TWENTY_APP_APPLICATION_ACCESS_TOKEN/);
   });
 
   it('should throw a RestApiClientError when the access token is missing', async () => {
@@ -171,6 +236,23 @@ describe('RestApiClient', () => {
 
       const [url] = fetchMock.mock.calls[0];
       expect(url).toBe('https://api.twenty.test/s/my-app/my-route');
+    });
+
+    it('should fall back to the internal api url /s route when one is provided', async () => {
+      vi.stubGlobal('process', {
+        env: {
+          TWENTY_API_URL: 'https://api.twenty.test',
+          TWENTY_INTERNAL_API_URL: 'http://twenty-server:3000',
+          TWENTY_FUNCTIONS_URL: '',
+          TWENTY_APP_ACCESS_TOKEN: 'app-access-token',
+        },
+      });
+      const fetchMock = vi.fn().mockResolvedValue(buildResponse('{}'));
+
+      await new RestApiClient({ fetch: fetchMock }).post('/s/my-app/my-route');
+
+      const [url] = fetchMock.mock.calls[0];
+      expect(url).toBe('http://twenty-server:3000/s/my-app/my-route');
     });
 
     it('should treat an empty functions url as not injected', async () => {
@@ -279,6 +361,25 @@ describe('RestApiClient', () => {
 
       expect(url).toBe('https://api.twenty.test/rest/companies');
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('should resolve urls on the internal api url when one is provided', () => {
+      (globalThis as Record<string, unknown>).process = {
+        env: {
+          TWENTY_API_URL: 'https://api.twenty.test',
+          TWENTY_INTERNAL_API_URL: 'http://twenty-server:3000',
+          TWENTY_APP_ACCESS_TOKEN: 'app-access-token',
+        },
+      };
+
+      const client = new RestApiClient({ fetch: vi.fn() });
+
+      expect(client.resolveUrl('/s/documents/view')).toBe(
+        'http://twenty-server:3000/s/documents/view',
+      );
+      expect(client.resolveUrl('/rest/companies')).toBe(
+        'http://twenty-server:3000/rest/companies',
+      );
     });
   });
 

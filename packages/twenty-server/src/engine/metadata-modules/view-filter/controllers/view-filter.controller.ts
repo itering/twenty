@@ -17,52 +17,47 @@ import { isDefined } from 'twenty-shared/utils';
 
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { parseMetadataRestPagination } from 'src/engine/api/rest/metadata/utils/parse-metadata-rest-pagination.util';
-import { type AuthenticatedRequest } from 'src/engine/api/rest/types/authenticated-request';
+import { type AuthenticatedRequest } from 'src/engine/api/rest/types/authenticated-request.type';
+import { AuthUserWorkspaceId } from 'src/engine/decorators/auth/auth-user-workspace-id.decorator';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
-import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
-import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
 import { FlatEntityMapsRestApiExceptionFilter } from 'src/engine/metadata-modules/flat-entity/filters/flat-entity-maps-rest-api-exception.filter';
-import { PermissionsRestApiExceptionFilter } from 'src/engine/metadata-modules/permissions/utils/permissions-rest-api-exception.filter';
+import { PermissionsRestApiExceptionFilter } from 'src/engine/permissions/utils/permissions-rest-api-exception.filter';
 import { CreateViewFilterInput } from 'src/engine/metadata-modules/view-filter/dtos/inputs/create-view-filter.input';
 import { UpdateViewFilterInput } from 'src/engine/metadata-modules/view-filter/dtos/inputs/update-view-filter.input';
 import { ViewFilterDTO } from 'src/engine/metadata-modules/view-filter/dtos/view-filter.dto';
-import {
-  generateViewFilterExceptionMessage,
-  generateViewFilterUserFriendlyExceptionMessage,
-  ViewFilterException,
-  ViewFilterExceptionCode,
-  ViewFilterExceptionMessageKey,
-} from 'src/engine/metadata-modules/view-filter/exceptions/view-filter.exception';
 import { ViewFilterRestApiExceptionFilter } from 'src/engine/metadata-modules/view-filter/filters/view-filter-rest-api-exception.filter';
 import { ViewFilterService } from 'src/engine/metadata-modules/view-filter/services/view-filter.service';
-import { CreateViewFilterPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/create-view-filter-permission.guard';
-import { DeleteViewFilterPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/delete-view-filter-permission.guard';
-import { UpdateViewFilterPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/update-view-filter-permission.guard';
 import { WorkspaceMigrationRunnerRestApiExceptionFilter } from 'src/engine/workspace-manager/workspace-migration/filters/workspace-migration-runner-rest-api-exception.filter';
+import { CreateViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view/guards/create-view-child-entity-permission.guard';
+import { ViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view/guards/view-child-entity-permission.guard';
+import { AuthRestApiExceptionFilter } from 'src/engine/core-modules/auth/filters/auth-rest-api-exception.filter';
+import { VIEW_FILTER_ACCESS_POLICY } from 'src/engine/metadata-modules/view-filter/constants/view-filter-access-policy.constant';
+import { AccessPolicyGuard } from 'src/engine/guards/access-policy.guard';
 
 @Controller(`${ApiPath.Rest}/metadata/viewFilters`)
-@UseGuards(WorkspaceAuthGuard)
+@UseGuards(AccessPolicyGuard(VIEW_FILTER_ACCESS_POLICY))
 @UseFilters(
   PermissionsRestApiExceptionFilter,
   ViewFilterRestApiExceptionFilter,
   FlatEntityMapsRestApiExceptionFilter,
   WorkspaceMigrationRunnerRestApiExceptionFilter,
+  AuthRestApiExceptionFilter,
 )
 export class ViewFilterController {
   constructor(private readonly viewFilterService: ViewFilterService) {}
 
   @Get()
-  @UseGuards(NoPermissionGuard)
   async findMany(
     @Req() request: AuthenticatedRequest,
     @AuthWorkspace() workspace: WorkspaceEntity,
+    @AuthUserWorkspaceId({ allowUndefined: true })
+    userWorkspaceId: string | undefined,
     @Query('viewId') viewId?: string,
   ) {
     const page = await this.viewFilterService.findManyPaginated({
       workspaceId: workspace.id,
-      // An empty viewId means "no filter", matching the sibling view
-      // controllers, rather than filtering on the empty string.
       viewId: viewId === '' ? undefined : viewId,
+      userWorkspaceId,
       pagination: parseMetadataRestPagination(request),
     });
 
@@ -74,33 +69,21 @@ export class ViewFilterController {
   }
 
   @Get(':id')
-  @UseGuards(NoPermissionGuard)
   async findOne(
     @Param('id') id: string,
     @AuthWorkspace() workspace: WorkspaceEntity,
+    @AuthUserWorkspaceId({ allowUndefined: true })
+    userWorkspaceId: string | undefined,
   ): Promise<ViewFilterDTO> {
-    const viewFilter = await this.viewFilterService.findById(id, workspace.id);
-
-    if (!isDefined(viewFilter)) {
-      throw new ViewFilterException(
-        generateViewFilterExceptionMessage(
-          ViewFilterExceptionMessageKey.VIEW_FILTER_NOT_FOUND,
-          id,
-        ),
-        ViewFilterExceptionCode.VIEW_FILTER_NOT_FOUND,
-        {
-          userFriendlyMessage: generateViewFilterUserFriendlyExceptionMessage(
-            ViewFilterExceptionMessageKey.VIEW_FILTER_NOT_FOUND,
-          ),
-        },
-      );
-    }
-
-    return viewFilter;
+    return this.viewFilterService.findByIdOrThrow({
+      id,
+      workspaceId: workspace.id,
+      userWorkspaceId,
+    });
   }
 
   @Post()
-  @UseGuards(CreateViewFilterPermissionGuard)
+  @UseGuards(CreateViewChildEntityPermissionGuard)
   async create(
     @Body() input: CreateViewFilterInput,
     @AuthWorkspace() workspace: WorkspaceEntity,
@@ -112,7 +95,7 @@ export class ViewFilterController {
   }
 
   @Patch(':id')
-  @UseGuards(UpdateViewFilterPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewFilter'))
   async update(
     @Param('id') id: string,
     @Body() input: UpdateViewFilterInput,
@@ -130,7 +113,7 @@ export class ViewFilterController {
   }
 
   @Delete(':id')
-  @UseGuards(DeleteViewFilterPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewFilter'))
   async delete(
     @Param('id') id: string,
     @AuthWorkspace() workspace: WorkspaceEntity,

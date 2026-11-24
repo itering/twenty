@@ -1,74 +1,28 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 
-import { FileFolder } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
 
-import { fileFolderConfigs } from 'src/engine/core-modules/file/interfaces/file-folder.interface';
-
-import { FileTokenJwtPayload } from 'src/engine/core-modules/auth/types/file-token-jwt-payload.type';
-import { JwtWrapperService } from 'src/engine/core-modules/jwt/services/jwt-wrapper.service';
-
-export const SUPPORTED_FILE_FOLDERS = [
-  FileFolder.CorePicture,
-  FileFolder.FilesField,
-  FileFolder.Workflow,
-  FileFolder.AgentChat,
-  FileFolder.EmailAttachment,
-  FileFolder.EmailImage,
-  FileFolder.AppTarball,
-  FileFolder.Dpa,
-] as const;
-
-export type SupportedFileFolder = (typeof SUPPORTED_FILE_FOLDERS)[number];
+import { FileUrlService } from 'src/engine/core-modules/file/file-url/file-url.service';
 
 @Injectable()
 export class FileByIdGuard implements CanActivate {
-  constructor(private readonly jwtWrapperService: JwtWrapperService) {}
+  constructor(private readonly fileUrlService: FileUrlService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const fileId = request.params.id;
-    const fileFolder = request.params.fileFolder as FileFolder;
-    const fileToken = request.query.token;
 
-    if (!this.isSupportedFileFolder(fileFolder)) {
+    const workspaceId = await this.fileUrlService.verifyFileToken({
+      fileToken: request.query.token,
+      fileId: request.params.id,
+      fileFolder: request.params.fileFolder,
+    });
+
+    if (!isDefined(workspaceId)) {
       return false;
     }
 
-    if (!fileToken) {
-      return false;
-    }
-
-    try {
-      const payload = await this.jwtWrapperService.verifyJwtToken(fileToken, {
-        ignoreExpiration: fileFolderConfigs[fileFolder].ignoreExpirationToken,
-      });
-
-      if (!payload.workspaceId) {
-        return false;
-      }
-    } catch {
-      return false;
-    }
-
-    const decodedPayload = this.jwtWrapperService.decode<FileTokenJwtPayload>(
-      fileToken,
-      {
-        json: true,
-      },
-    );
-
-    request.workspaceId = decodedPayload.workspaceId;
-
-    if (decodedPayload.fileId !== fileId) {
-      return false;
-    }
+    request.workspaceId = workspaceId;
 
     return true;
-  }
-
-  private isSupportedFileFolder(
-    fileFolder: string,
-  ): fileFolder is SupportedFileFolder {
-    return SUPPORTED_FILE_FOLDERS.includes(fileFolder as SupportedFileFolder);
   }
 }

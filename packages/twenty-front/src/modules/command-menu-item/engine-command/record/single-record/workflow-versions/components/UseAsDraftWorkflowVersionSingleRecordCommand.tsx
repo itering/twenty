@@ -3,9 +3,11 @@ import { HeadlessEngineCommandWrapperEffect } from '@/command-menu-item/engine-c
 import { useHeadlessCommandContextApi } from '@/command-menu-item/engine-command/hooks/useHeadlessCommandContextApi';
 import { useCreateDraftFromWorkflowVersion } from '@/workflow/hooks/useCreateDraftFromWorkflowVersion';
 import { useWorkflowWithCurrentVersion } from '@/workflow/hooks/useWorkflowWithCurrentVersion';
+import { useCoreWorkflowVersion } from '@/object-core/workflows/versions/hooks/useCoreWorkflowVersion';
 import { useLingui } from '@lingui/react/macro';
-import { AppPath, CoreObjectNameSingular } from 'twenty-shared/types';
+import { AppPath } from 'twenty-shared/types';
 import { getAppPath, isDefined } from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
 import { useNavigateApp } from '~/hooks/useNavigateApp';
 
 const UseAsDraftWorkflowVersionSingleRecordCommandContent = ({
@@ -30,10 +32,7 @@ const UseAsDraftWorkflowVersionSingleRecordCommandContent = ({
       workflowVersionIdToCopy: workflowVersionId,
     });
 
-    navigate(AppPath.RecordShowPage, {
-      objectNameSingular: CoreObjectNameSingular.Workflow,
-      objectRecordId: workflowId,
-    });
+    navigate(AppPath.WorkflowCoreShowPage, { coreWorkflowId: workflowId });
   };
 
   if (!isDefined(workflow)) {
@@ -51,9 +50,8 @@ const UseAsDraftWorkflowVersionSingleRecordCommandContent = ({
       confirmButtonText={t`Override Draft`}
       linkButton={{
         title: t`Go to Draft`,
-        to: getAppPath(AppPath.RecordShowPage, {
-          objectNameSingular: CoreObjectNameSingular.Workflow,
-          objectRecordId: workflowId,
+        to: getAppPath(AppPath.WorkflowCoreShowPage, {
+          coreWorkflowId: workflowId,
         }),
       }}
       execute={handleExecute}
@@ -64,18 +62,26 @@ const UseAsDraftWorkflowVersionSingleRecordCommandContent = ({
 export const UseAsDraftWorkflowVersionSingleRecordCommand = () => {
   const { selectedRecords } = useHeadlessCommandContextApi();
 
-  const selectedRecord = selectedRecords[0];
+  const { coreWorkflowVersion, loading } = useCoreWorkflowVersion(
+    selectedRecords[0]?.coreWorkflowVersionId,
+  );
 
-  if (!isDefined(selectedRecord) || !isDefined(selectedRecord.workflowId)) {
+  if (loading || !isDefined(coreWorkflowVersion)) {
+    return null;
+  }
+
+  if (!isDefined(coreWorkflowVersion.coreWorkflowId)) {
     throw new Error(
-      'Record ID and workflow ID are required to use as draft workflow version',
+      doNotTranslate(
+        'Record ID and workflow ID are required to use as draft workflow version',
+      ),
     );
   }
 
   return (
     <UseAsDraftWorkflowVersionSingleRecordCommandContent
-      workflowId={selectedRecord.workflowId}
-      workflowVersionId={selectedRecord.id}
+      workflowId={coreWorkflowVersion.coreWorkflowId}
+      workflowVersionId={coreWorkflowVersion.id}
     />
   );
 };

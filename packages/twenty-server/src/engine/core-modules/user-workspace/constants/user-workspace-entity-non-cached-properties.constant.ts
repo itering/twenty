@@ -5,7 +5,8 @@ export const USER_WORKSPACE_ENTITY_NON_CACHED_PROPERTIES = [
   'user',
   'twoFactorAuthenticationMethods',
   'permissionFlags',
-  'objectPermissions',
-  'objectsPermissions',
+  'objectRecordsPermissions',
   'twoFactorAuthenticationMethodSummary',
+  'inboxNotificationLevel',
+  'isInboxNotificationPreviewEnabled',
 ] as const satisfies ReadonlyArray<keyof UserWorkspaceEntity>;

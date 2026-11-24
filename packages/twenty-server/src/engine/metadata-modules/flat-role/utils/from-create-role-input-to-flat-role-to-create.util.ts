@@ -34,7 +34,11 @@ export const fromCreateRoleInputToFlatRoleToCreate = ({
     icon: icon ?? null,
     canUpdateAllSettings: createRoleInput.canUpdateAllSettings ?? false,
     canAccessAllTools: createRoleInput.canAccessAllTools ?? false,
+    canAccessAllAgentChatChannels:
+      createRoleInput.canAccessAllAgentChatChannels ?? false,
     canReadAllObjectRecords: createRoleInput.canReadAllObjectRecords ?? false,
+    canCreateAllObjectRecords:
+      createRoleInput.canUpdateAllObjectRecords ?? false,
     canUpdateAllObjectRecords:
       createRoleInput.canUpdateAllObjectRecords ?? false,
     canSoftDeleteAllObjectRecords:
@@ -44,7 +48,9 @@ export const fromCreateRoleInputToFlatRoleToCreate = ({
     canBeAssignedToUsers: createRoleInput.canBeAssignedToUsers ?? true,
     canBeAssignedToAgents: createRoleInput.canBeAssignedToAgents ?? true,
     canBeAssignedToApiKeys: createRoleInput.canBeAssignedToApiKeys ?? true,
+    canBeAssignedToApplications: false,
     isEditable: true,
+    isSystemSideEffect: false,
     workspaceId,
     createdAt: now,
     updatedAt: now,
@@ -58,9 +64,13 @@ export const fromCreateRoleInputToFlatRoleToCreate = ({
     objectPermissionUniversalIdentifiers: [],
     rolePermissionFlagUniversalIdentifiers: [],
     fieldPermissionIds: [],
+    rowLevelPermissionRuleIds: [],
     fieldPermissionUniversalIdentifiers: [],
+    rowLevelPermissionRuleUniversalIdentifiers: [],
     rowLevelPermissionPredicateIds: [],
+    agentChatChannelRoleIds: [],
     rowLevelPermissionPredicateUniversalIdentifiers: [],
+    agentChatChannelRoleUniversalIdentifiers: [],
     rowLevelPermissionPredicateGroupIds: [],
     rowLevelPermissionPredicateGroupUniversalIdentifiers: [],
   };

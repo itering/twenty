@@ -2,14 +2,13 @@ import { useLingui } from '@lingui/react/macro';
 
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
 import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
+import { SettingsTabBar } from '@/settings/components/layout/SettingsTabBar';
 import { useSettingsActiveTabId } from '@/settings/components/layout/useSettingsActiveTabId';
 import { SettingsWorkspaceUnsubscribeTopicSection } from '@/settings/unsubscribe-topics/components/SettingsWorkspaceUnsubscribeTopicSection';
 import { SettingsUnsubscribePreview } from '@/settings/unsubscribers/components/SettingsUnsubscribePreview';
 import { SettingsUnsubscribersList } from '@/settings/unsubscribers/components/SettingsUnsubscribersList';
 import { SETTINGS_UNSUBSCRIBE_TAB_IDS } from '@/settings/unsubscribers/constants/SettingsUnsubscribeTabIds';
-import { TabList } from '@/ui/layout/tab-list/components/TabList';
-import { useIsFeatureEnabled } from '@/workspace/hooks/useIsFeatureEnabled';
-import { FeatureFlagKey, SettingsPath } from 'twenty-shared/types';
+import { SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath } from 'twenty-shared/utils';
 import { IconEye, IconForbid, IconMailCog } from 'twenty-ui/icon';
 
@@ -18,14 +17,10 @@ const UNSUBSCRIBE_TABS_INSTANCE_ID = 'settings-unsubscribe-tabs';
 export const SettingsWorkspaceUnsubscribe = () => {
   const { t } = useLingui();
 
-  const isEmailGroupEnabled = useIsFeatureEnabled(
-    FeatureFlagKey.IS_EMAIL_GROUP_ENABLED,
-  );
-
   const tabs = [
     {
       id: SETTINGS_UNSUBSCRIBE_TAB_IDS.UNSUBSCRIBERS,
-      title: t`Unsubscribers`,
+      title: t`Opt-outs`,
       Icon: IconForbid,
     },
     {
@@ -45,10 +40,6 @@ export const SettingsWorkspaceUnsubscribe = () => {
     tabs.map((tab) => tab.id),
   );
 
-  if (!isEmailGroupEnabled) {
-    return null;
-  }
-
   return (
     <SettingsPageLayout
       title={t`Unsubscribe`}
@@ -63,12 +54,15 @@ export const SettingsWorkspaceUnsubscribe = () => {
         },
         { children: t`Unsubscribe` },
       ]}
-    >
-      <SettingsPageContainer>
-        <TabList
+      secondaryBar={
+        <SettingsTabBar
+          aria-label={t`Unsubscribe settings`}
           tabs={tabs}
           componentInstanceId={UNSUBSCRIBE_TABS_INSTANCE_ID}
         />
+      }
+    >
+      <SettingsPageContainer>
         {activeTabId === SETTINGS_UNSUBSCRIBE_TAB_IDS.UNSUBSCRIBERS && (
           <SettingsUnsubscribersList />
         )}

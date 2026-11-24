@@ -47,6 +47,17 @@ describe('formatGoogleCalendarEvents', () => {
     },
   };
 
+  it('should lowercase attendee handles', () => {
+    const [formattedEvent] = formatGoogleCalendarEvents([
+      {
+        ...mockGoogleEvent,
+        attendees: [{ email: 'John.Doe@Example.com', displayName: 'John Doe' }],
+      },
+    ]);
+
+    expect(formattedEvent.participants[0].handle).toBe('john.doe@example.com');
+  });
+
   it('should correctly format a normal Google Calendar event', () => {
     const result = formatGoogleCalendarEvents([mockGoogleEvent]);
 
@@ -76,6 +87,25 @@ describe('formatGoogleCalendarEvents', () => {
     expect(formattedEvent.participants[1].responseStatus).toBe(
       CalendarEventParticipantResponseStatus.TENTATIVE,
     );
+  });
+
+  it('should list room attendees from the resource flag or the resource email domain as resources', () => {
+    const [formattedEvent] = formatGoogleCalendarEvents([
+      {
+        ...mockGoogleEvent,
+        attendees: [
+          { email: 'person@example.com' },
+          { email: 'Flagged-Room@example.com', resource: true },
+          { email: 'acme.com_188abc@resource.calendar.google.com' },
+        ],
+      },
+    ]);
+
+    expect(formattedEvent.resourceHandles).toEqual([
+      'flagged-room@example.com',
+      'acme.com_188abc@resource.calendar.google.com',
+    ]);
+    expect(formattedEvent.participants).toHaveLength(3);
   });
 
   const testCases: EachTestingContext<{ input: string; expected: string }>[] = [
@@ -121,5 +151,19 @@ describe('formatGoogleCalendarEvents', () => {
     ]);
 
     expect(result[0].iCalUid).toBe(context.expected);
+  });
+
+  it.each([
+    [undefined, false],
+    ['default', false],
+    ['public', false],
+    ['private', true],
+    ['confidential', true],
+  ])('should map visibility %s to isPrivate %s', (visibility, isPrivate) => {
+    const [formattedEvent] = formatGoogleCalendarEvents([
+      { ...mockGoogleEvent, visibility },
+    ]);
+
+    expect(formattedEvent.isPrivate).toBe(isPrivate);
   });
 });

@@ -11,12 +11,12 @@ export const filterVisibleWidgets = ({
   widgets,
   context,
 }: FilterVisibleWidgetsParams): PageLayoutTab['widgets'] => {
-  return widgets.filter((widget) => {
-    return evaluateWidgetVisibility({
+  return widgets.filter((widget) =>
+    evaluateWidgetVisibility({
       conditionalAvailabilityExpression:
         widget.conditionalAvailabilityExpression,
       conditionalDisplay: widget.conditionalDisplay,
       context,
-    });
-  });
+    }),
+  );
 };

@@ -20,16 +20,37 @@ type ListScheduledRecallBotsResult =
 
 const RECALL_BOT_LIST_MAX_PAGES = 10;
 
-export const listScheduledRecallBots = async ({
-  joinAtAfter,
-  joinAtBefore,
-  metadata,
-  statuses,
-}: {
+type ListScheduledRecallBotsArguments = {
   joinAtAfter?: string;
   joinAtBefore?: string;
   metadata?: Record<string, string>;
-  statuses?: string[];
+};
+
+export const listScheduledRecallBots = async (
+  listScheduledRecallBotsArguments: ListScheduledRecallBotsArguments,
+): Promise<ListScheduledRecallBotsResult> =>
+  listScheduledRecallBotsWithPageRequestPolicy({
+    listScheduledRecallBotsArguments,
+    shouldStartPageRequest: () => true,
+  });
+
+export const listScheduledRecallBotsBeforeRequestCutoff = async ({
+  requestStartCutoffEpochMs,
+  ...listScheduledRecallBotsArguments
+}: ListScheduledRecallBotsArguments & {
+  requestStartCutoffEpochMs: number;
+}): Promise<ListScheduledRecallBotsResult> =>
+  listScheduledRecallBotsWithPageRequestPolicy({
+    listScheduledRecallBotsArguments,
+    shouldStartPageRequest: () => Date.now() < requestStartCutoffEpochMs,
+  });
+
+const listScheduledRecallBotsWithPageRequestPolicy = async ({
+  listScheduledRecallBotsArguments: { joinAtAfter, joinAtBefore, metadata },
+  shouldStartPageRequest,
+}: {
+  listScheduledRecallBotsArguments: ListScheduledRecallBotsArguments;
+  shouldStartPageRequest: () => boolean;
 }): Promise<ListScheduledRecallBotsResult> => {
   const configResult = getRecallApiConfig();
 
@@ -51,14 +72,11 @@ export const listScheduledRecallBots = async ({
     searchParameters.set(`metadata__${key}`, value);
   });
 
-  statuses?.forEach((status) => {
-    searchParameters.append('status', status);
-  });
-
   const result = await fetchRecallListPages({
     config: configResult.config,
     initialPath: `/bot/?${searchParameters.toString()}`,
     maxPages: RECALL_BOT_LIST_MAX_PAGES,
+    shouldStartPageRequest,
     extractPageItems: extractRecallBots,
     malformedErrorMessage: 'Recall API returned malformed bot list',
   });

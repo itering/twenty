@@ -38,8 +38,10 @@ export const CREATE_ONE_OBJECT_METADATA_ITEM = gql`
         isActive
         isSystem
         isUIEditable
+        isSystemSideEffect
         isNullable
         isUnique
+        isSearchable
         createdAt
         updatedAt
         defaultValue
@@ -106,6 +108,7 @@ export const CREATE_ONE_FIELD_METADATA_ITEM = gql`
       icon
       isActive
       isUnique
+      isSearchable
       isNullable
       createdAt
       updatedAt
@@ -177,6 +180,7 @@ export const UPDATE_ONE_FIELD_METADATA_ITEM = gql`
       icon
       isActive
       isUnique
+      isSearchable
       isNullable
       createdAt
       updatedAt
@@ -252,6 +256,7 @@ export const DELETE_ONE_FIELD_METADATA_ITEM = gql`
       icon
       isActive
       isUnique
+      isSearchable
       isNullable
       createdAt
       updatedAt
@@ -271,7 +276,8 @@ export const CREATE_ONE_INDEX_METADATA_ITEM = gql`
       name
       indexType
       isUnique
-      isCustom
+      applicationId
+      isSystemSideEffect
       indexWhereClause
       createdAt
       updatedAt

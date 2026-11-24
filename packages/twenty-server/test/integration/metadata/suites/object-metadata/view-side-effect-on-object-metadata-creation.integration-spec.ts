@@ -74,6 +74,13 @@ describe('View side effect on object creation', () => {
     return createOneObject;
   };
 
+  const findInitialViews = <TView extends { key: string | null; type: string }>(
+    views: TView[],
+  ) =>
+    views.filter(
+      (view) => !isDefined(view.key) && view.type === ViewType.TABLE,
+    );
+
   const findIndexView = async (objectMetadataId: string) => {
     const {
       data: { getViews },
@@ -95,7 +102,6 @@ describe('View side effect on object creation', () => {
     });
 
     expect(createdViews).toBeDefined();
-    expect(createdViews.length).toBe(2);
 
     const indexView = createdViews.find((view) => view.key === 'INDEX');
 
@@ -116,6 +122,42 @@ describe('View side effect on object creation', () => {
     });
 
     expect(indexViewFields.length).toBe(5);
+  });
+
+  it('should expose the initial view and its view fields', async () => {
+    const createOneObject = await createDishesObject();
+
+    createdObjectMetadataId = createOneObject.id;
+
+    const {
+      data: { getViews: createdViews },
+    } = await findViews({
+      objectMetadataId: createdObjectMetadataId,
+      expectToFail: false,
+    });
+
+    const [initialView, ...extraInitialViews] = findInitialViews(createdViews);
+
+    if (!isDefined(initialView)) {
+      throw new Error('expected a initial user-owned view to be exposed');
+    }
+
+    expect(extraInitialViews).toHaveLength(0);
+
+    expect(initialView).toMatchObject<Partial<FlatView>>({
+      objectMetadataId: createdObjectMetadataId,
+      type: ViewType.TABLE,
+      name: 'All Dishes I love',
+    });
+
+    const {
+      data: { getViewFields: initialViewFields },
+    } = await findViewFields({
+      viewId: initialView.id,
+      expectToFail: false,
+    });
+
+    expect(initialViewFields.length).toBe(5);
   });
 
   it('should keep the same INDEX view when the object is renamed (lossless, deterministic identifier)', async () => {

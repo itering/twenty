@@ -1,13 +1,16 @@
-import { t } from '@lingui/core/macro';
 import { styled } from '@linaria/react';
 
 import { isNonEmptyString } from '@sniptt/guards';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { isDefined } from 'twenty-shared/utils';
+import { themeCssVariables } from 'twenty-ui/theme';
 
-import { LazyMarkdownRenderer } from '@/ai/components/LazyMarkdownRenderer';
+import { LazyMarkdownRenderer } from '@/ai-chat/message-content/components/LazyMarkdownRenderer';
+import { SettingsAdminChatAskQuestionsPart } from '@/settings/admin-panel/components/SettingsAdminChatAskQuestionsPart';
 import { SettingsAdminChatCollapsibleSection } from '@/settings/admin-panel/components/SettingsAdminChatCollapsibleSection';
 import { SettingsAdminChatToolCallPart } from '@/settings/admin-panel/components/SettingsAdminChatToolCallPart';
 import { type AdminChatThreadMessagePart } from '@/settings/admin-panel/types/AdminChatThreadMessagePart';
+import { parseAdminAskQuestionsResult } from '@/settings/admin-panel/utils/parseAdminAskQuestionsResult';
+import { useLingui } from '@lingui/react/macro';
 
 type SettingsAdminChatMessagePartRendererProps = {
   part: AdminChatThreadMessagePart;
@@ -49,6 +52,7 @@ export const SettingsAdminChatMessagePartRenderer = ({
   part,
   isUserMessage,
 }: SettingsAdminChatMessagePartRendererProps) => {
+  const { t } = useLingui();
   if (part.type === 'text' && isNonEmptyString(part.textContent)) {
     return (
       <StyledTextContent isUser={isUserMessage}>
@@ -66,6 +70,17 @@ export const SettingsAdminChatMessagePartRenderer = ({
       <SettingsAdminChatCollapsibleSection label={t`Reasoning`}>
         <StyledReasoningContent>{part.reasoningContent}</StyledReasoningContent>
       </SettingsAdminChatCollapsibleSection>
+    );
+  }
+
+  const askQuestionsResult = parseAdminAskQuestionsResult(part);
+
+  if (isDefined(askQuestionsResult)) {
+    return (
+      <SettingsAdminChatAskQuestionsPart
+        part={part}
+        result={askQuestionsResult}
+      />
     );
   }
 

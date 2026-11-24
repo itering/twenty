@@ -2,6 +2,8 @@ import { useDragDropMonitor } from '@dnd-kit/react';
 import { isFunction } from '@sniptt/guards';
 import { Fragment, type JSX, useContext, useEffect, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
+import { closestCenter } from '@dnd-kit/collision';
 
 import { DraggableListGroupContext } from '@/ui/layout/draggable-list/contexts/DraggableListGroupContext';
 import { DragDropItemDropTarget } from '@/ui/utilities/drag-and-drop/components/DragDropItemDropTarget';
@@ -41,7 +43,6 @@ export const DraggableItem = ({
     },
   });
 
-  // Items report their presence so the list can size its trailing drop target.
   useEffect(() => {
     if (!isDefined(draggableListGroupContext)) {
       return;
@@ -56,7 +57,9 @@ export const DraggableItem = ({
   }, [draggableListGroupContext, draggableId, index]);
 
   if (!isDefined(draggableListGroupContext)) {
-    throw new Error('DraggableItem must be rendered inside a DraggableList');
+    throw new Error(
+      doNotTranslate('DraggableItem must be rendered inside a DraggableList'),
+    );
   }
 
   const { group } = draggableListGroupContext;
@@ -80,6 +83,7 @@ export const DraggableItem = ({
         highlightWhileDragging={!disableDraggingBackground}
         orientation="horizontal"
         restrictMovementTo={restrictMovementTo}
+        collisionDetector={closestCenter}
       >
         {isFunction(itemComponent)
           ? itemComponent({ isDragging })

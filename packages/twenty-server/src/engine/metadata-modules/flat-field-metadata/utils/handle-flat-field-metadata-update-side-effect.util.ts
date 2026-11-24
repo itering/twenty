@@ -15,6 +15,7 @@ import {
 import { isEnumFlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/is-enum-flat-field-metadata.util';
 import { type FlatViewFiltersToDeleteAndUpdate } from 'src/engine/metadata-modules/flat-field-metadata/utils/recompute-view-filters-on-flat-field-metadata-options-update.util';
 import { type FlatViewGroupsToDeleteUpdateAndCreate } from 'src/engine/metadata-modules/flat-field-metadata/utils/recompute-view-groups-on-flat-field-metadata-options-update.util';
+import { resolveEffectiveFlatEntityProperty } from 'src/engine/metadata-modules/overrides/utils/resolve-effective-flat-entity-property.util';
 
 export type FlatFieldMetadataUpdateSideEffects =
   FlatViewFiltersToDeleteAndUpdate &
@@ -35,6 +36,8 @@ type HandleFlatFieldMetadataUpdateSideEffectArgs = FromTo<
     | 'flatViewGroupMaps'
     | 'flatViewMaps'
     | 'flatViewFieldMaps'
+    | 'flatViewSortMaps'
+    | 'flatFieldMetadataOptionMaps'
   >;
 
 export const FLAT_FIELD_METADATA_UPDATE_EMPTY_SIDE_EFFECTS: FlatFieldMetadataUpdateSideEffects =
@@ -49,6 +52,7 @@ export const FLAT_FIELD_METADATA_UPDATE_EMPTY_SIDE_EFFECTS: FlatFieldMetadataUpd
     flatViewGroupsToUpdate: [],
     flatViewsToDelete: [],
     flatViewFieldsToDelete: [],
+    flatViewSortsToDelete: [],
     flatViewsToUpdate: [],
   };
 
@@ -62,20 +66,31 @@ export const handleFlatFieldMetadataUpdateSideEffect = ({
   flatViewGroupMaps,
   flatViewMaps,
   flatViewFieldMaps,
+  flatViewSortMaps,
+  flatFieldMetadataOptionMaps,
 }: HandleFlatFieldMetadataUpdateSideEffectArgs): FieldInputTranspilationResult<FlatFieldMetadataUpdateSideEffects> => {
   const sideEffectResult = structuredClone(
     FLAT_FIELD_METADATA_UPDATE_EMPTY_SIDE_EFFECTS,
   );
 
   const isDeactivation =
-    fromFlatFieldMetadata.isActive === true &&
-    toFlatFieldMetadata.isActive === false;
+    resolveEffectiveFlatEntityProperty({
+      metadataName: 'fieldMetadata',
+      flatEntity: fromFlatFieldMetadata,
+      property: 'isActive',
+    }) === true &&
+    resolveEffectiveFlatEntityProperty({
+      metadataName: 'fieldMetadata',
+      flatEntity: toFlatFieldMetadata,
+      property: 'isActive',
+    }) === false;
 
   if (isDeactivation) {
     const {
       flatViewsToDelete,
       flatViewFieldsToDelete,
       flatViewFiltersToDelete,
+      flatViewSortsToDelete,
       flatViewsToUpdate,
     } = handleFieldMetadataDeactivationSideEffects({
       flatViewMaps,
@@ -84,12 +99,14 @@ export const handleFlatFieldMetadataUpdateSideEffect = ({
       flatViewFieldMaps,
       flatViewFilterMaps,
       flatViewGroupMaps,
+      flatViewSortMaps,
     });
 
     sideEffectResult.flatViewsToUpdate.push(...flatViewsToUpdate);
     sideEffectResult.flatViewsToDelete.push(...flatViewsToDelete);
     sideEffectResult.flatViewFieldsToDelete.push(...flatViewFieldsToDelete);
     sideEffectResult.flatViewFiltersToDelete.push(...flatViewFiltersToDelete);
+    sideEffectResult.flatViewSortsToDelete.push(...flatViewSortsToDelete);
   } else if (
     isEnumFlatFieldMetadata(toFlatFieldMetadata) &&
     isEnumFlatFieldMetadata(fromFlatFieldMetadata)
@@ -106,6 +123,7 @@ export const handleFlatFieldMetadataUpdateSideEffect = ({
       flatViewGroupMaps,
       fromFlatFieldMetadata,
       toFlatFieldMetadata,
+      flatFieldMetadataOptionMaps,
     });
 
     sideEffectResult.flatViewFiltersToUpdate.push(...flatViewFiltersToUpdate);

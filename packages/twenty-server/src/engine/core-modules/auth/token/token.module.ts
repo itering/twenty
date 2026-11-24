@@ -1,26 +1,28 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { TypeORMModule } from 'src/database/typeorm/typeorm.module';
 import { AppTokenEntity } from 'src/engine/core-modules/app-token/app-token.entity';
 import { ApplicationEntity } from 'src/engine/core-modules/application/application.entity';
+import { ServerAdminIdentityAssertionService } from 'src/engine/core-modules/auth/identity-assertion/services/server-admin-identity-assertion.service';
+import { ApplicationAuthorizationModule } from 'src/engine/core-modules/application/application-authorization/application-authorization.module';
 import { JwtAuthStrategy } from 'src/engine/core-modules/auth/strategies/jwt.auth.strategy';
 import { AccessTokenService } from 'src/engine/core-modules/auth/token/services/access-token.service';
 import { ApplicationTokenService } from 'src/engine/core-modules/auth/token/services/application-token.service';
 import { LoginTokenService } from 'src/engine/core-modules/auth/token/services/login-token.service';
 import { RefreshTokenService } from 'src/engine/core-modules/auth/token/services/refresh-token.service';
 import { RenewTokenService } from 'src/engine/core-modules/auth/token/services/renew-token.service';
-import { SSOExchangeTokenService } from 'src/engine/core-modules/auth/token/services/sso-exchange-token.service';
+import { SsoExchangeTokenService } from 'src/engine/core-modules/auth/token/services/sso-exchange-token.service';
 import { WorkspaceAgnosticTokenService } from 'src/engine/core-modules/auth/token/services/workspace-agnostic-token.service';
 import { ImpersonationAuthorizationModule } from 'src/engine/core-modules/impersonation/impersonation-authorization.module';
 import { JwtModule } from 'src/engine/core-modules/jwt/jwt.module';
+import { SecureHttpClientModule } from 'src/engine/core-modules/secure-http-client/secure-http-client.module';
 import { UserSessionModule } from 'src/engine/core-modules/user-session/user-session.module';
 import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
 import { UserEntity } from 'src/engine/core-modules/user/user.entity';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { CoreEntityCacheModule } from 'src/engine/core-entity-cache/core-entity-cache.module';
-import { PermissionsModule } from 'src/engine/metadata-modules/permissions/permissions.module';
 import { WorkspaceCacheModule } from 'src/engine/workspace-cache/workspace-cache.module';
+import { provideWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/provide-workspace-scoped-repository';
 
 @Module({
   imports: [
@@ -32,22 +34,24 @@ import { WorkspaceCacheModule } from 'src/engine/workspace-cache/workspace-cache
       UserWorkspaceEntity,
       ApplicationEntity,
     ]),
-    TypeORMModule,
-    PermissionsModule,
     WorkspaceCacheModule,
     CoreEntityCacheModule,
     ImpersonationAuthorizationModule,
     UserSessionModule,
+    SecureHttpClientModule,
+    ApplicationAuthorizationModule,
   ],
   providers: [
     RenewTokenService,
     JwtAuthStrategy,
     AccessTokenService,
+    ServerAdminIdentityAssertionService,
     LoginTokenService,
     RefreshTokenService,
     WorkspaceAgnosticTokenService,
     ApplicationTokenService,
-    SSOExchangeTokenService,
+    SsoExchangeTokenService,
+    provideWorkspaceScopedRepository(ApplicationEntity),
   ],
   exports: [
     RenewTokenService,
@@ -56,7 +60,7 @@ import { WorkspaceCacheModule } from 'src/engine/workspace-cache/workspace-cache
     RefreshTokenService,
     WorkspaceAgnosticTokenService,
     ApplicationTokenService,
-    SSOExchangeTokenService,
+    SsoExchangeTokenService,
   ],
 })
 export class TokenModule {}

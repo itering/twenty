@@ -6,8 +6,13 @@ import {
   type OpenCommandConfirmationModalHostFunction,
   type OpenSidePanelPageFunction,
   type RequestAccessTokenRefreshFunction,
+  type SetToolCallArgumentsFunction,
+  type StorageClearFunction,
+  type StorageDeleteFunction,
+  type StorageSetFunction,
   type UnmountFrontComponentFunction,
   type UpdateProgressFunction,
+  type UploadFileFunction,
 } from 'twenty-sdk/front-component';
 
 export type FrontComponentHostCommunicationApi = {
@@ -20,4 +25,9 @@ export type FrontComponentHostCommunicationApi = {
   closeSidePanel: CloseSidePanelFunction;
   updateProgress: UpdateProgressFunction;
   copyToClipboard: CopyToClipboardFunction;
+  setToolCallArguments: SetToolCallArgumentsFunction;
+  uploadFile: UploadFileFunction;
+  storageSet: StorageSetFunction;
+  storageDelete: StorageDeleteFunction;
+  storageClear: StorageClearFunction;
 };

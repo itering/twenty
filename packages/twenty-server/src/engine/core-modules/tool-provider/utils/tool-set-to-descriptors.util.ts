@@ -1,6 +1,7 @@
 import { type ToolSet } from 'ai';
 import { z } from 'zod';
 
+import { isNonEmptyString } from '@sniptt/guards';
 import { type ToolCategory } from 'twenty-shared/ai';
 import { toToolJsonSchema } from 'src/engine/core-modules/record-crud/utils/to-tool-json-schema.util';
 import { type ToolDescriptor } from 'src/engine/core-modules/tool-provider/types/tool-descriptor.type';
@@ -10,6 +11,13 @@ export type ToolSetToDescriptorsOptions = {
   includeSchemas?: boolean;
   icon?: string;
 };
+
+// Tool factories may mark themselves destructive or read-only; ToolSet types do not carry the flags
+const isDestructiveTool = (tool: object): boolean =>
+  'isDestructive' in tool && tool.isDestructive === true;
+
+const isReadOnlyTool = (tool: object): boolean =>
+  'isReadOnly' in tool && tool.isReadOnly === true;
 
 export const humanizeToolName = (name: string): string =>
   name
@@ -29,10 +37,13 @@ export const toolSetToDescriptors = (
     const base: ToolIndexEntry = {
       name,
       label: humanizeToolName(name),
-      description: tool.description ?? '',
+      // A per-call description function needs a tool context the index lacks.
+      description: isNonEmptyString(tool.description) ? tool.description : '',
       category,
       executionRef: { kind: 'static' as const, toolId: name },
       ...(options?.icon && { icon: options.icon }),
+      ...(isDestructiveTool(tool) && { isDestructive: true }),
+      ...(isReadOnlyTool(tool) && { isReadOnly: true }),
     };
 
     if (!includeSchemas) {

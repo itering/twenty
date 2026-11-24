@@ -1,0 +1,47 @@
+.root {
+  color: var(--t-font-color-light);
+  display: inline-flex;
+  flex: none;
+  font-size: inherit;
+  vertical-align: middle;
+  white-space: nowrap;
+
+  &[data-variant='keys'] {
+    font-size: var(--t-font-size-sm);
+  }
+
+  &[data-variant='text'] {
+    color: inherit;
+  }
+
+  &[data-variant='button'] {
+    align-items: center;
+    color: inherit;
+    font-weight: var(--t-font-weight-medium);
+    gap: var(--t-spacing-1_5);
+    margin-inline-start: var(--t-spacing-1);
+    opacity: 0.5;
+
+    &::before {
+      background-color: currentColor;
+      block-size: var(--t-spacing-2);
+      content: '';
+      inline-size: 1px;
+      opacity: 0.4;
+    }
+  }
+}
+
+.content {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--t-spacing-1);
+}
+
+.sequenceJoinLabel {
+  color: var(--t-font-color-light);
+}
+
+.key {
+  font: inherit;
+}

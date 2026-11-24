@@ -22,9 +22,6 @@ export const convertUpdateViewInputToGql = (
       anyFieldFilterValue: view.anyFieldFilterValue,
     }),
     ...(isDefined(view.key) && { key: view.key }),
-    ...(isDefined(view.openRecordIn) && {
-      openRecordIn: view.openRecordIn,
-    }),
     ...(isDefined(view.type) && { type: view.type }),
     ...(isDefined(view.calendarLayout) && {
       calendarLayout: view.calendarLayout,
@@ -39,8 +36,14 @@ export const convertUpdateViewInputToGql = (
     ...(isDefined(view.shouldHideEmptyGroups) && {
       shouldHideEmptyGroups: view.shouldHideEmptyGroups,
     }),
+    ...(isDefined(view.shouldDisplayGroupsAsTabs) && {
+      shouldDisplayGroupsAsTabs: view.shouldDisplayGroupsAsTabs,
+    }),
     ...(view.kanbanColumnWidth !== undefined && {
       kanbanColumnWidth: view.kanbanColumnWidth,
+    }),
+    ...(view.groupLoadLimit !== undefined && {
+      groupLoadLimit: view.groupLoadLimit,
     }),
     ...(view.mainGroupByFieldMetadataId !== undefined && {
       mainGroupByFieldMetadataId: view.mainGroupByFieldMetadataId,

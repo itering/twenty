@@ -1,0 +1,107 @@
+import { styled } from '@linaria/react';
+import { type ReactNode } from 'react';
+import { isDefined, isNonEmptyArray } from 'twenty-shared/utils';
+import { IconRefresh } from 'twenty-ui/icon';
+import { Button } from 'twenty-ui/primitives/input';
+import { themeCssVariables } from 'twenty-ui/theme';
+
+import { InboxThreadList } from '@/inbox/components/InboxThreadList';
+import { type AiChatThreadRecord } from '@/ai-chat/threads/types/AiChatThreadRecord';
+import { SkeletonLoader } from '@/activities/components/SkeletonLoader';
+import { AnimatedPlaceholder } from '@/ui/feedback/empty-state/components/AnimatedPlaceholder/AnimatedPlaceholder';
+import { useAiChatThreadClick } from '@/ai-chat/threads/hooks/useAiChatThreadClick';
+import { useSidePanelAiChatThreadId } from '@/side-panel/hooks/useSidePanelAiChatThreadId';
+import { EmptyState } from '@/ui/feedback/empty-state/components/EmptyState';
+import { ErrorState } from '@/ui/feedback/empty-state/components/ErrorState';
+import { useLingui } from '@lingui/react/macro';
+
+const StyledThreadsContainer = styled.div`
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[2]};
+  height: 100%;
+  min-width: 0;
+  overflow: auto;
+`;
+
+type ChatThreadsCardContentProps = {
+  loading: boolean;
+  error?: unknown;
+  onRetry: () => void;
+  onDetachThread: (threadId: string) => void;
+  threads: AiChatThreadRecord[];
+  hasNextPage?: boolean;
+  pagination?: ReactNode;
+};
+
+export const ChatThreadsCardContent = ({
+  loading,
+  error,
+  onRetry,
+  onDetachThread,
+  threads,
+  hasNextPage = false,
+  pagination,
+}: ChatThreadsCardContentProps) => {
+  const { t } = useLingui();
+  const { handleThreadClick } = useAiChatThreadClick({
+    resetNavigationStack: false,
+  });
+  const sidePanelThreadId = useSidePanelAiChatThreadId();
+  const isThreadsEmpty = !isNonEmptyArray(threads);
+
+  if (loading && isThreadsEmpty) {
+    return <SkeletonLoader />;
+  }
+
+  if (isDefined(error) && isThreadsEmpty) {
+    return (
+      <ErrorState.Root>
+        <AnimatedPlaceholder type="errorIndex" />
+        <ErrorState.Content>
+          <ErrorState.Title>
+            {t`We couldn't load the conversations`}
+          </ErrorState.Title>
+          <ErrorState.Description>
+            {t`Something went wrong while fetching this record's conversations.`}
+          </ErrorState.Description>
+        </ErrorState.Content>
+        <Button
+          startIcon={<IconRefresh />}
+          onClick={onRetry}
+          variant="outline"
+        >{t`Try again`}</Button>
+      </ErrorState.Root>
+    );
+  }
+
+  if (isThreadsEmpty && !hasNextPage) {
+    return (
+      <EmptyState.Root>
+        <AnimatedPlaceholder type="emptyInbox" />
+        <EmptyState.Content>
+          <EmptyState.Title>{t`No conversations`}</EmptyState.Title>
+          <EmptyState.Description>
+            {t`Conversations linked to this record will appear here.`}
+          </EmptyState.Description>
+        </EmptyState.Content>
+      </EmptyState.Root>
+    );
+  }
+
+  return (
+    <StyledThreadsContainer>
+      <InboxThreadList
+        threads={threads}
+        variant="compact"
+        selectedThreadIds={
+          isDefined(sidePanelThreadId) ? [sidePanelThreadId] : []
+        }
+        onThreadClick={handleThreadClick}
+        onDetachThread={onDetachThread}
+      />
+      {pagination}
+    </StyledThreadsContainer>
+  );
+};

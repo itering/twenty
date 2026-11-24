@@ -1,8 +1,23 @@
-import { STANDARD_OBJECTS } from 'twenty-shared/metadata';
+import { msg } from '@lingui/core/macro';
+import {
+  STANDARD_NAVIGATION_MENU_ITEM_UNIVERSAL_IDENTIFIERS,
+  STANDARD_OBJECTS,
+} from 'twenty-shared/metadata';
 
 import { NavigationMenuItemType } from 'src/engine/metadata-modules/navigation-menu-item/enums/navigation-menu-item-type.enum';
+import { i18nLabel } from 'src/engine/workspace-manager/twenty-standard-application/utils/i18n-label.util';
 
 export const STANDARD_NAVIGATION_MENU_ITEMS = {
+  workspaceSection: {
+    universalIdentifier:
+      STANDARD_NAVIGATION_MENU_ITEM_UNIVERSAL_IDENTIFIERS.workspaceSection
+        .universalIdentifier,
+    type: NavigationMenuItemType.SECTION,
+    name: i18nLabel(
+      msg({ message: `Workspace`, context: 'navigationMenuItem.name' }),
+    ),
+    position: 0,
+  },
   allCompanies: {
     universalIdentifier: '20202020-b001-4b01-8b01-c0aba11c0001',
     type: NavigationMenuItemType.OBJECT,
@@ -45,26 +60,45 @@ export const STANDARD_NAVIGATION_MENU_ITEMS = {
       STANDARD_OBJECTS.dashboard.views.allDashboards.universalIdentifier,
     position: 5,
   },
+  campaignsFolder: {
+    universalIdentifier: '20202020-b00c-4b0c-8b0c-c0aba11c000c',
+    type: NavigationMenuItemType.FOLDER,
+    name: i18nLabel(
+      msg({ message: `Campaigns`, context: 'navigationMenuItem.name' }),
+    ),
+    icon: 'IconSend',
+    position: 7,
+  },
   allMessageCampaigns: {
     universalIdentifier: '20202020-b00b-4b0b-8b0b-c0aba11c000b',
     type: NavigationMenuItemType.OBJECT,
     viewUniversalIdentifier:
       STANDARD_OBJECTS.messageCampaign.views.allMessageCampaigns
         .universalIdentifier,
-    position: 7,
+    folderUniversalIdentifier: '20202020-b00c-4b0c-8b0c-c0aba11c000c',
+    position: 0,
+  },
+  allMessageLists: {
+    universalIdentifier: '20202020-b00d-4b0d-8b0d-c0aba11c000d',
+    type: NavigationMenuItemType.OBJECT,
+    viewUniversalIdentifier:
+      STANDARD_OBJECTS.messageList.views.allMessageLists.universalIdentifier,
+    folderUniversalIdentifier: '20202020-b00c-4b0c-8b0c-c0aba11c000c',
+    position: 1,
   },
   workflowsFolder: {
     universalIdentifier: '20202020-b007-4b07-8b07-c0aba11c0007',
     type: NavigationMenuItemType.FOLDER,
-    name: 'Workflows',
+    name: i18nLabel(
+      msg({ message: `Workflows`, context: 'navigationMenuItem.name' }),
+    ),
     icon: 'IconSettingsAutomation',
     position: 6,
   },
   workflowsFolderAllWorkflows: {
     universalIdentifier: '20202020-b008-4b08-8b08-c0aba11c0008',
-    type: NavigationMenuItemType.OBJECT,
-    viewUniversalIdentifier:
-      STANDARD_OBJECTS.workflow.views.allWorkflows.universalIdentifier,
+    type: NavigationMenuItemType.NATIVE_PAGE,
+    nativePageKey: 'workflows',
     folderUniversalIdentifier: '20202020-b007-4b07-8b07-c0aba11c0007',
     position: 0,
   },
@@ -75,15 +109,6 @@ export const STANDARD_NAVIGATION_MENU_ITEMS = {
       STANDARD_OBJECTS.workflowRun.views.allWorkflowRuns.universalIdentifier,
     folderUniversalIdentifier: '20202020-b007-4b07-8b07-c0aba11c0007',
     position: 1,
-  },
-  workflowsFolderAllWorkflowVersions: {
-    universalIdentifier: '20202020-b00a-4b0a-8b0a-c0aba11c000a',
-    type: NavigationMenuItemType.OBJECT,
-    viewUniversalIdentifier:
-      STANDARD_OBJECTS.workflowVersion.views.allWorkflowVersions
-        .universalIdentifier,
-    folderUniversalIdentifier: '20202020-b007-4b07-8b07-c0aba11c0007',
-    position: 2,
   },
 } as const;
 
@@ -96,9 +121,10 @@ export const STANDARD_NAVIGATION_MENU_ITEM_DEFAULT_COLORS: Partial<
   allNotes: 'turquoise',
   allOpportunities: 'red',
   workflowsFolder: 'orange',
+  campaignsFolder: 'purple',
   allMessageCampaigns: 'gray',
+  allMessageLists: 'gray',
   allDashboards: 'gray',
   workflowsFolderAllWorkflows: 'gray',
   workflowsFolderAllWorkflowRuns: 'gray',
-  workflowsFolderAllWorkflowVersions: 'gray',
 };

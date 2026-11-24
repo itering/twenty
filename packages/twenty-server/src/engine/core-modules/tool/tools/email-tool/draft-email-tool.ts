@@ -1,5 +1,10 @@
+import { EmailOperation } from 'twenty-shared/types';
+import { convertEmailBodyInputToEmailDocument } from 'twenty-shared/utils';
 import { Injectable, Logger } from '@nestjs/common';
 
+import { SOURCE_LOCALE } from 'twenty-shared/translations';
+
+import { I18nService } from 'src/engine/core-modules/i18n/i18n.service';
 import { EmailComposerService } from 'src/engine/core-modules/tool/tools/email-tool/email-composer.service';
 import { EmailToolInputZodSchema } from 'src/engine/core-modules/tool/tools/email-tool/email-tool.schema';
 import { EmailToolException } from 'src/engine/core-modules/tool/tools/email-tool/exceptions/email-tool.exception';
@@ -23,6 +28,7 @@ export class DraftEmailTool implements Tool {
   constructor(
     private readonly emailComposerService: EmailComposerService,
     private readonly messageOutboundService: MessagingMessageOutboundService,
+    private readonly i18nService: I18nService,
   ) {}
 
   async execute(
@@ -30,13 +36,21 @@ export class DraftEmailTool implements Tool {
     context: ToolExecutionContext,
   ): Promise<ToolOutput> {
     try {
-      const result = await this.emailComposerService.composeEmail(
-        parameters,
+      const result = await this.emailComposerService.composeEmail({
+        parameters: {
+          ...parameters,
+          body: convertEmailBodyInputToEmailDocument(parameters.body),
+        },
         context,
-      );
+        operation: EmailOperation.DRAFT,
+      });
 
       if (!result.success) {
-        return result.output;
+        const errorMessage = this.i18nService
+          .getI18nInstance(SOURCE_LOCALE)
+          ._(result.error);
+
+        return { success: false, message: errorMessage, error: errorMessage };
       }
 
       const { data } = result;
@@ -106,6 +120,7 @@ export class DraftEmailTool implements Tool {
   private async createDraft(data: ComposedEmail): Promise<void> {
     await this.messageOutboundService.createDraft(
       {
+        fromHandle: data.fromHandle,
         to: data.recipients.to,
         cc: data.recipients.cc.length > 0 ? data.recipients.cc : undefined,
         bcc: data.recipients.bcc.length > 0 ? data.recipients.bcc : undefined,

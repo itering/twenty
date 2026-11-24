@@ -7,13 +7,12 @@ import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/Enriche
 import { formatFieldMetadataItemAsColumnDefinition } from '@/object-metadata/utils/formatFieldMetadataItemAsColumnDefinition';
 import { isHiddenSystemField } from '@/object-metadata/utils/isHiddenSystemField';
 import { currentRecordFieldsComponentState } from '@/object-record/record-field/states/currentRecordFieldsComponentState';
+import { isRecordFieldSupportedByViewType } from '@/object-record/record-field/utils/isRecordFieldSupportedByViewType';
 import { type FieldMetadata } from '@/object-record/record-field/ui/types/FieldMetadata';
 import { currentRecordFilterGroupsComponentState } from '@/object-record/record-filter-group/states/currentRecordFilterGroupsComponentState';
+import { anyFieldFilterValueComponentState } from '@/object-record/record-filter/states/anyFieldFilterValueComponentState';
 import { currentRecordFiltersComponentState } from '@/object-record/record-filter/states/currentRecordFiltersComponentState';
 import { useSetRecordGroups } from '@/object-record/record-group/hooks/useSetRecordGroups';
-import { getSupportedRecordCalendarLayout } from '@/object-record/record-calendar/utils/getSupportedRecordCalendarLayout';
-import { getEffectiveRecordCalendarEndFieldMetadataId } from '@/object-record/record-calendar/utils/getEffectiveRecordCalendarEndFieldMetadataId';
-import { recordIndexCalendarEndFieldMetadataIdComponentState } from '@/object-record/record-index/states/recordIndexCalendarEndFieldMetadataIdComponentState';
 import { recordIndexGroupFieldMetadataItemComponentState } from '@/object-record/record-index/states/recordIndexGroupFieldMetadataComponentState';
 import { currentRecordSortsComponentState } from '@/object-record/record-sort/states/currentRecordSortsComponentState';
 
@@ -24,7 +23,9 @@ import { clampRecordBoardColumnWidth } from '@/object-record/record-board/utils/
 import { recordIndexFieldDefinitionsState } from '@/object-record/record-index/states/recordIndexFieldDefinitionsState';
 import { recordIndexGroupAggregateFieldMetadataItemComponentState } from '@/object-record/record-index/states/recordIndexGroupAggregateFieldMetadataItemComponentState';
 import { recordIndexGroupAggregateOperationComponentState } from '@/object-record/record-index/states/recordIndexGroupAggregateOperationComponentState';
+import { recordIndexGroupLoadLimitComponentState } from '@/object-record/record-index/states/recordIndexGroupLoadLimitComponentState';
 import { recordIndexKanbanColumnWidthComponentState } from '@/object-record/record-index/states/recordIndexKanbanColumnWidthComponentState';
+import { recordIndexShouldDisplayGroupsAsTabsComponentState } from '@/object-record/record-index/states/recordIndexShouldDisplayGroupsAsTabsComponentState';
 import { recordIndexShouldHideEmptyRecordGroupsComponentState } from '@/object-record/record-index/states/recordIndexShouldHideEmptyRecordGroupsComponentState';
 import { recordIndexViewTypeState } from '@/object-record/record-index/states/recordIndexViewTypeState';
 import { viewFieldAggregateOperationState } from '@/object-record/record-table/record-table-footer/states/viewFieldAggregateOperationState';
@@ -43,18 +44,14 @@ import { mapViewFieldToRecordField } from '@/views/utils/mapViewFieldToRecordFie
 import { mapViewFieldsToColumnDefinitions } from '@/views/utils/mapViewFieldsToColumnDefinitions';
 import { mapViewFilterGroupsToRecordFilterGroups } from '@/views/utils/mapViewFilterGroupsToRecordFilterGroups';
 import { mapViewFiltersToFilters } from '@/views/utils/mapViewFiltersToFilters';
-import { useIsFeatureEnabled } from '@/workspace/hooks/useIsFeatureEnabled';
 import { atom, useStore } from 'jotai';
 import { useCallback } from 'react';
-import { isDefined } from 'twenty-shared/utils';
-import { FeatureFlagKey } from '~/generated-metadata/graphql';
-import { isDeeplyEqual } from '~/utils/isDeeplyEqual';
+import { DEFAULT_VIEW_GROUP_LOAD_LIMIT } from 'twenty-shared/constants';
+import { fastDeepEqual, isDefined } from 'twenty-shared/utils';
+import { ViewCalendarLayout } from '~/generated-metadata/graphql';
 
 export const useLoadRecordIndexStates = () => {
   const store = useStore();
-  const isCalendarWeekViewEnabled = useIsFeatureEnabled(
-    FeatureFlagKey.IS_CALENDAR_WEEK_VIEW_ENABLED,
-  );
 
   const contextStoreTargetedRecordsRuleAtom =
     useAtomComponentStateCallbackState(
@@ -81,8 +78,17 @@ export const useLoadRecordIndexStates = () => {
       recordIndexShouldHideEmptyRecordGroupsComponentState,
     );
 
+  const recordIndexShouldDisplayGroupsAsTabsAtom =
+    useAtomComponentStateCallbackState(
+      recordIndexShouldDisplayGroupsAsTabsComponentState,
+    );
+
   const recordIndexKanbanColumnWidthAtom = useAtomComponentStateCallbackState(
     recordIndexKanbanColumnWidthComponentState,
+  );
+
+  const recordIndexGroupLoadLimitAtom = useAtomComponentStateCallbackState(
+    recordIndexGroupLoadLimitComponentState,
   );
 
   const ambientViewInstanceId = useAvailableComponentInstanceId(
@@ -96,12 +102,10 @@ export const useLoadRecordIndexStates = () => {
 
   const syncRecordIndexViewFields = useCallback(
     (
-      view: Pick<View, 'id' | 'viewFields'>,
+      view: Pick<View, 'id' | 'type' | 'viewFields'>,
       objectMetadataItem: EnrichedObjectMetadataItem,
       options?: { skipGlobalIndexStates?: boolean; recordIndexId?: string },
     ) => {
-      const skipGlobalIndexStates = options?.skipGlobalIndexStates ?? false;
-
       const activeFieldMetadataItems = objectMetadataItem.fields.filter(
         (field) => field.isActive && !isHiddenSystemField(field),
       );
@@ -153,14 +157,25 @@ export const useLoadRecordIndexStates = () => {
 
       const recordFields = view.viewFields
         .map(mapViewFieldToRecordField)
-        .filter(isDefined);
+        .filter((recordField) =>
+          isRecordFieldSupportedByViewType({
+            recordField,
+            viewType: view.type,
+          }),
+        );
 
       const recordIndexId =
         options?.recordIndexId ??
+        ambientViewInstanceId ??
         getRecordIndexIdFromObjectNamePluralAndViewId(
           objectMetadataItem.namePlural,
           view.id,
         );
+
+      const recordIndexFieldDefinitionsAtom =
+        recordIndexFieldDefinitionsState.atomFamily({
+          instanceId: recordIndexId,
+        });
 
       const currentRecordFieldsAtom =
         currentRecordFieldsComponentState.atomFamily({
@@ -175,17 +190,10 @@ export const useLoadRecordIndexStates = () => {
 
       store.set(
         atom(null, (get, batchSet) => {
-          if (!skipGlobalIndexStates) {
-            const existingFieldDefs = get(
-              recordIndexFieldDefinitionsState.atom,
-            );
+          const existingFieldDefs = get(recordIndexFieldDefinitionsAtom);
 
-            if (!isDeeplyEqual(existingFieldDefs, newFieldDefinitions)) {
-              batchSet(
-                recordIndexFieldDefinitionsState.atom,
-                newFieldDefinitions,
-              );
-            }
+          if (!fastDeepEqual(existingFieldDefs, newFieldDefinitions)) {
+            batchSet(recordIndexFieldDefinitionsAtom, newFieldDefinitions);
           }
 
           for (const viewField of view.viewFields) {
@@ -220,7 +228,7 @@ export const useLoadRecordIndexStates = () => {
 
           const existingRecordFields = get(currentRecordFieldsAtom);
 
-          if (!isDeeplyEqual(existingRecordFields, recordFields)) {
+          if (!fastDeepEqual(existingRecordFields, recordFields)) {
             batchSet(currentRecordFieldsAtom, recordFields);
           }
 
@@ -228,7 +236,7 @@ export const useLoadRecordIndexStates = () => {
         }),
       );
     },
-    [store],
+    [ambientViewInstanceId, store],
   );
 
   const loadRecordIndexStates = useCallback(
@@ -237,8 +245,6 @@ export const useLoadRecordIndexStates = () => {
       objectMetadataItem: EnrichedObjectMetadataItem,
       options?: { skipGlobalIndexStates?: boolean; recordIndexId?: string },
     ) => {
-      const skipGlobalIndexStates = options?.skipGlobalIndexStates ?? false;
-
       const flattenedFieldMetadataItems = store.get(
         flattenedFieldMetadataItemsSelector.atom,
       );
@@ -280,13 +286,22 @@ export const useLoadRecordIndexStates = () => {
 
       const recordIndexId =
         options?.recordIndexId ??
+        ambientViewInstanceId ??
         getRecordIndexIdFromObjectNamePluralAndViewId(
           objectMetadataItem.namePlural,
           view.id,
         );
 
+      const recordIndexViewTypeAtom = recordIndexViewTypeState.atomFamily({
+        instanceId: recordIndexId,
+      });
+
       const currentRecordFiltersAtom =
         currentRecordFiltersComponentState.atomFamily({
+          instanceId: recordIndexId,
+        });
+      const anyFieldFilterValueAtom =
+        anyFieldFilterValueComponentState.atomFamily({
           instanceId: recordIndexId,
         });
       const currentRecordFilterGroupsAtom =
@@ -310,14 +325,14 @@ export const useLoadRecordIndexStates = () => {
         });
 
       syncRecordIndexViewFields(view, objectMetadataItem, {
-        skipGlobalIndexStates,
-        recordIndexId: options?.recordIndexId,
+        recordIndexId,
       });
 
       store.set(
         atom(null, (get, batchSet) => {
           batchSet(currentRecordFiltersAtom, recordFilters);
           batchSet(currentRecordFilterGroupsAtom, recordFilterGroups);
+          batchSet(anyFieldFilterValueAtom, view.anyFieldFilterValue ?? '');
           batchSet(hasInitializedFiltersAtom, true);
 
           batchSet(currentRecordSortsAtom, view.viewSorts);
@@ -329,12 +344,9 @@ export const useLoadRecordIndexStates = () => {
             filters: contextStoreFilters,
           });
 
-          if (!skipGlobalIndexStates) {
-            batchSet(recordIndexViewTypeState.atom, view.type);
-          }
+          batchSet(recordIndexViewTypeAtom, view.type);
 
-          const recordCalendarInstanceId =
-            options?.recordIndexId ?? ambientViewInstanceId;
+          const recordCalendarInstanceId = recordIndexId;
 
           if (isDefined(recordCalendarInstanceId)) {
             batchSet(
@@ -344,22 +356,10 @@ export const useLoadRecordIndexStates = () => {
               view.calendarFieldMetadataId ?? null,
             );
             batchSet(
-              recordIndexCalendarEndFieldMetadataIdComponentState.atomFamily({
-                instanceId: recordCalendarInstanceId,
-              }),
-              getEffectiveRecordCalendarEndFieldMetadataId({
-                calendarEndFieldMetadataId: view.calendarEndFieldMetadataId,
-                isCalendarWeekViewEnabled,
-              }),
-            );
-            batchSet(
               recordIndexCalendarLayoutComponentState.atomFamily({
                 instanceId: recordCalendarInstanceId,
               }),
-              getSupportedRecordCalendarLayout({
-                calendarLayout: view.calendarLayout,
-                isCalendarWeekViewEnabled,
-              }),
+              view.calendarLayout ?? ViewCalendarLayout.MONTH,
             );
           }
 
@@ -369,10 +369,21 @@ export const useLoadRecordIndexStates = () => {
           );
 
           batchSet(
+            recordIndexShouldDisplayGroupsAsTabsAtom,
+            view.shouldDisplayGroupsAsTabs ?? false,
+          );
+
+          batchSet(
             recordIndexKanbanColumnWidthAtom,
             clampRecordBoardColumnWidth(
               view.kanbanColumnWidth ?? RECORD_BOARD_COLUMN_WIDTH,
             ),
+          );
+
+          // Mocks and views cached before this column existed have no groupLoadLimit
+          batchSet(
+            recordIndexGroupLoadLimitAtom,
+            view.groupLoadLimit ?? DEFAULT_VIEW_GROUP_LOAD_LIMIT,
           );
 
           if (isDefined(recordIndexGroupFieldMetadataItemValue)) {
@@ -403,7 +414,7 @@ export const useLoadRecordIndexStates = () => {
         mainGroupByFieldMetadataId: view.mainGroupByFieldMetadataId ?? '',
         viewGroups: view.viewGroups,
         objectMetadataItem,
-        recordIndexId: options?.recordIndexId,
+        recordIndexId,
       });
     },
     [
@@ -414,11 +425,12 @@ export const useLoadRecordIndexStates = () => {
       recordIndexGroupAggregateOperationAtom,
       recordIndexGroupAggregateFieldMetadataItemAtom,
       recordIndexShouldHideEmptyRecordGroupsAtom,
+      recordIndexShouldDisplayGroupsAsTabsAtom,
       recordIndexKanbanColumnWidthAtom,
+      recordIndexGroupLoadLimitAtom,
       getFieldMetadataItemByIdOrThrow,
       setRecordGroupsFromViewGroups,
       syncRecordIndexViewFields,
-      isCalendarWeekViewEnabled,
     ],
   );
 

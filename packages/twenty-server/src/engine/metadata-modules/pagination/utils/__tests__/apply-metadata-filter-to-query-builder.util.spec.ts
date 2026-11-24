@@ -1,31 +1,49 @@
-import { Brackets, type WhereExpressionBuilder } from 'typeorm';
+import {
+  Brackets,
+  type ObjectLiteral,
+  type WhereExpressionBuilder,
+} from 'typeorm';
 
 import { UserInputError } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
-import {
-  applyMetadataFilterToItems,
-  applyMetadataFilterToQueryBuilder,
-} from 'src/engine/metadata-modules/pagination/utils/apply-metadata-filter-to-query-builder.util';
+import { applyMetadataFilterToQueryBuilder } from 'src/engine/metadata-modules/pagination/utils/apply-metadata-filter-to-query-builder.util';
 
-class FakeWhereBuilder {
+type WhereCondition =
+  | string
+  | Brackets
+  | ObjectLiteral
+  | ObjectLiteral[]
+  | ((queryBuilder: WhereExpressionBuilder) => string);
+
+class FakeWhereBuilder implements WhereExpressionBuilder {
   conditions: string[] = [];
   parameters: Record<string, unknown> = {};
 
-  andWhere(
-    condition: string | Brackets,
-    parameters?: Record<string, unknown>,
-  ): this {
+  where(): this {
+    throw new Error('Not used by applyMetadataFilterToQueryBuilder');
+  }
+
+  andWhere(condition: WhereCondition, parameters?: ObjectLiteral): this {
     this.append('AND', condition, parameters);
 
     return this;
   }
 
-  orWhere(
-    condition: string | Brackets,
-    parameters?: Record<string, unknown>,
-  ): this {
+  orWhere(condition: WhereCondition, parameters?: ObjectLiteral): this {
     this.append('OR', condition, parameters);
 
     return this;
+  }
+
+  whereInIds(): this {
+    throw new Error('Not used by applyMetadataFilterToQueryBuilder');
+  }
+
+  andWhereInIds(): this {
+    throw new Error('Not used by applyMetadataFilterToQueryBuilder');
+  }
+
+  orWhereInIds(): this {
+    throw new Error('Not used by applyMetadataFilterToQueryBuilder');
   }
 
   render(): string {
@@ -38,15 +56,13 @@ class FakeWhereBuilder {
 
   private append(
     operator: 'AND' | 'OR',
-    condition: string | Brackets,
-    parameters?: Record<string, unknown>,
+    condition: WhereCondition,
+    parameters?: ObjectLiteral,
   ): void {
     if (condition instanceof Brackets) {
       const nestedBuilder = new FakeWhereBuilder();
 
-      condition.whereFactory(
-        nestedBuilder as unknown as WhereExpressionBuilder,
-      );
+      condition.whereFactory(nestedBuilder);
       this.conditions.push(`${operator} (${nestedBuilder.render()})`);
       Object.assign(this.parameters, nestedBuilder.parameters);
     } else {
@@ -68,7 +84,7 @@ const applyFilter = (
   const whereBuilder = new FakeWhereBuilder();
 
   applyMetadataFilterToQueryBuilder({
-    whereBuilder: whereBuilder as unknown as WhereExpressionBuilder,
+    whereBuilder,
     alias: 'entity',
     filter,
     columnByFilterField,
@@ -174,18 +190,9 @@ describe('applyMetadataFilterToQueryBuilder', () => {
     expect(() => applyFilter({ id: { is: true } })).toThrow(UserInputError);
   });
 
-  it('normalizes UUID operands for database and in-memory filters', () => {
-    type UuidFilter = {
-      and?: UuidFilter[];
-      or?: UuidFilter[];
-      id?: { eq?: string; in?: string[] };
-    };
-
+  it('normalizes UUID operands for database filters', () => {
     const lowerCaseUuid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const upperCaseUuid = lowerCaseUuid.toUpperCase();
-    const filter: UuidFilter = {
-      id: { eq: upperCaseUuid, in: [upperCaseUuid] },
-    };
     const whereBuilder = applyFilter({
       id: { eq: upperCaseUuid, in: [upperCaseUuid] },
     });
@@ -194,69 +201,6 @@ describe('applyMetadataFilterToQueryBuilder', () => {
       metadataFilterParameter0: lowerCaseUuid,
       metadataFilterParameter1: [lowerCaseUuid],
     });
-    expect(
-      applyMetadataFilterToItems({
-        items: [{ id: lowerCaseUuid }],
-        filter,
-        columnByFilterField: {
-          id: { column: 'id', type: 'uuid' },
-        },
-      }),
-    ).toEqual([{ id: lowerCaseUuid }]);
-  });
-
-  it('applies the same filter semantics to batched in-memory relations', () => {
-    type TestFilter = {
-      and?: TestFilter[];
-      id?: { gt?: string; lt?: string };
-      isActive?: { is?: boolean };
-    };
-
-    const items = [
-      { id: 'a', isActive: true },
-      { id: 'b', isActive: false },
-      { id: 'c', isActive: true },
-    ];
-
-    expect(
-      applyMetadataFilterToItems<(typeof items)[number], TestFilter>({
-        items,
-        filter: {
-          and: [{ isActive: { is: true } }],
-          id: { gt: 'a', lt: 'c' },
-        },
-        columnByFilterField: {
-          id: { column: 'id', type: 'uuid' },
-          isActive: { column: 'isActive', type: 'boolean' },
-        },
-      }),
-    ).toEqual([]);
-  });
-
-  it('matches uuid filters regardless of operand casing', () => {
-    type UuidFilter = {
-      and?: UuidFilter[];
-      or?: UuidFilter[];
-      id?: { eq?: string; neq?: string; in?: string[]; notIn?: string[] };
-    };
-
-    const items = [{ id: '00000000-0000-4000-8000-00000000000a' }];
-    const columnByFilterField = {
-      id: { column: 'id', type: 'uuid' },
-    } as const;
-    const upperCasedId = items[0].id.toUpperCase();
-
-    const matching = (filter: UuidFilter) =>
-      applyMetadataFilterToItems<(typeof items)[number], UuidFilter>({
-        items,
-        filter,
-        columnByFilterField,
-      });
-
-    expect(matching({ id: { eq: upperCasedId } })).toEqual(items);
-    expect(matching({ id: { in: [upperCasedId] } })).toEqual(items);
-    expect(matching({ id: { neq: upperCasedId } })).toEqual([]);
-    expect(matching({ id: { notIn: [upperCasedId] } })).toEqual([]);
   });
 
   it('ignores undefined filter values', () => {

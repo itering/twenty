@@ -1,20 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 
+import { FeatureFlagKey } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 import { Any, Repository } from 'typeorm';
 
 import { InjectCacheStorage } from 'src/engine/core-modules/cache-storage/decorators/cache-storage.decorator';
 import { CacheStorageService } from 'src/engine/core-modules/cache-storage/services/cache-storage.service';
 import { CacheStorageNamespace } from 'src/engine/core-modules/cache-storage/types/cache-storage-namespace.enum';
+import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
 import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+import { WorkspaceInternalImportService } from 'src/engine/core-modules/workspace/services/workspace-internal-import.service';
 import { type CalendarChannelEntity } from 'src/engine/metadata-modules/calendar-channel/entities/calendar-channel.entity';
 import { type ConnectedAccountEntity } from 'src/engine/metadata-modules/connected-account/entities/connected-account.entity';
-import { InjectObjectMetadataRepository } from 'src/engine/object-metadata-repository/object-metadata-repository.decorator';
-import { GlobalWorkspaceOrmManager } from 'src/engine/twenty-orm/global-workspace-datasource/global-workspace-orm.manager';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
 import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 import { BlocklistRepository } from 'src/modules/blocklist/repositories/blocklist.repository';
-import { BlocklistWorkspaceEntity } from 'src/modules/blocklist/standard-objects/blocklist.workspace-entity';
 import { CalendarEventCleanerService } from 'src/modules/calendar/calendar-event-cleaner/services/calendar-event-cleaner.service';
 import { CALENDAR_EVENT_IMPORT_BATCH_SIZE } from 'src/modules/calendar/calendar-event-import-manager/constants/calendar-event-import-batch-size';
 import {
@@ -27,7 +28,7 @@ import {
 } from 'src/modules/calendar/calendar-event-import-manager/services/calendar-event-import-exception-handler.service';
 import { CalendarImportEventsService } from 'src/modules/calendar/calendar-event-import-manager/services/calendar-import-events.service';
 import { CalendarSaveEventsService } from 'src/modules/calendar/calendar-event-import-manager/services/calendar-save-events.service';
-import { filterEventsAndReturnCancelledEvents } from 'src/modules/calendar/calendar-event-import-manager/utils/filter-events.util';
+import { filterEventsAndReturnEventsToRemove } from 'src/modules/calendar/calendar-event-import-manager/utils/filter-events-and-return-events-to-remove.util';
 import { CalendarChannelSyncStatusService } from 'src/modules/calendar/common/services/calendar-channel-sync-status.service';
 import { type CalendarChannelEventAssociationWorkspaceEntity } from 'src/modules/calendar/common/standard-objects/calendar-channel-event-association.workspace-entity';
 import { EmailAliasManagerService } from 'src/modules/connected-account/email-alias-manager/services/email-alias-manager.service';
@@ -38,8 +39,7 @@ export class CalendarEventsImportService {
   constructor(
     @InjectCacheStorage(CacheStorageNamespace.ModuleCalendar)
     private readonly cacheStorage: CacheStorageService,
-    private readonly globalWorkspaceOrmManager: GlobalWorkspaceOrmManager,
-    @InjectObjectMetadataRepository(BlocklistWorkspaceEntity)
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
     private readonly blocklistRepository: BlocklistRepository,
     private readonly calendarEventCleanerService: CalendarEventCleanerService,
     private readonly calendarChannelSyncStatusService: CalendarChannelSyncStatusService,
@@ -49,6 +49,8 @@ export class CalendarEventsImportService {
     private readonly emailAliasManagerService: EmailAliasManagerService,
     @InjectRepository(UserWorkspaceEntity)
     private readonly userWorkspaceRepository: Repository<UserWorkspaceEntity>,
+    private readonly workspaceInternalImportService: WorkspaceInternalImportService,
+    private readonly featureFlagService: FeatureFlagService,
   ) {}
 
   public async processCalendarEventsImport(
@@ -63,7 +65,7 @@ export class CalendarEventsImportService {
 
     const authContext = buildSystemAuthContext(workspaceId);
 
-    await this.globalWorkspaceOrmManager.executeInWorkspaceContext(
+    await this.workspaceOrmManager.executeInWorkspaceContext(
       async () => {
         try {
           const eventIdsToFetch: string[] = await this.cacheStorage.setPop(
@@ -94,10 +96,8 @@ export class CalendarEventsImportService {
           });
 
           const workspaceMemberRepository =
-            await this.globalWorkspaceOrmManager.getRepository<WorkspaceMemberWorkspaceEntity>(
-              workspaceId,
+            this.workspaceOrmManager.getRepositoryWithoutPermissionChecks<WorkspaceMemberWorkspaceEntity>(
               'workspaceMember',
-              { shouldBypassPermissionChecks: true },
             );
 
           const workspaceMember = userWorkspace
@@ -106,12 +106,13 @@ export class CalendarEventsImportService {
               })
             : null;
 
-          const blocklist = workspaceMember
-            ? await this.blocklistRepository.getByWorkspaceMemberId(
-                workspaceMember.id,
+          const blocklist =
+            await this.blocklistRepository.getEntriesApplicableToWorkspaceMember(
+              {
+                workspaceMemberId: workspaceMember?.id ?? null,
                 workspaceId,
-              )
-            : [];
+              },
+            );
 
           if (!isDefined(connectedAccount.handleAliases)) {
             connectedAccount.handleAliases =
@@ -131,14 +132,31 @@ export class CalendarEventsImportService {
             );
           }
 
-          const { filteredEvents, cancelledEvents } =
-            filterEventsAndReturnCancelledEvents(
-              [calendarChannel.handle, ...connectedAccount.handleAliases],
-              calendarEvents,
-              blocklist.map((blocklist) => blocklist.handle ?? ''),
+          const isInternalImportEnabled =
+            await this.workspaceInternalImportService.isInternalImportEnabled({
+              workspaceId,
+            });
+
+          const isInternalEventsFilterEnabled =
+            await this.featureFlagService.isFeatureEnabled(
+              FeatureFlagKey.IS_CALENDAR_INTERNAL_EVENTS_FILTER_ENABLED,
+              workspaceId,
             );
 
-          const cancelledEventExternalIds = cancelledEvents.map(
+          const { filteredEvents, eventsToRemove } =
+            filterEventsAndReturnEventsToRemove({
+              primaryHandle: calendarChannel.handle,
+              handleAliases: connectedAccount.handleAliases,
+              events: calendarEvents,
+              blocklist: blocklist
+                .map((blocklistItem) => blocklistItem.handle)
+                .filter(isDefined),
+              excludePrivateEvents: calendarChannel.excludePrivateEvents,
+              isInternalEventsFilterEnabled,
+              isInternalMessagesImportEnabled: isInternalImportEnabled,
+            });
+
+          const eventExternalIdsToRemove = eventsToRemove.map(
             (event) => event.id,
           );
 
@@ -154,20 +172,35 @@ export class CalendarEventsImportService {
               workspaceId,
             );
           }
-          const calendarChannelEventAssociationRepository =
-            await this.globalWorkspaceOrmManager.getRepository<CalendarChannelEventAssociationWorkspaceEntity>(
-              workspaceId,
-              'calendarChannelEventAssociation',
+          if (eventExternalIdsToRemove.length > 0) {
+            const calendarChannelEventAssociationRepository =
+              this.workspaceOrmManager.getRepositoryWithoutPermissionChecks<CalendarChannelEventAssociationWorkspaceEntity>(
+                'calendarChannelEventAssociation',
+              );
+
+            const associationsToDelete =
+              await calendarChannelEventAssociationRepository.find({
+                where: {
+                  eventExternalId: Any(eventExternalIdsToRemove),
+                  calendarChannelId: calendarChannel.id,
+                },
+                select: { calendarEventId: true },
+              });
+
+            await calendarChannelEventAssociationRepository.delete({
+              eventExternalId: Any(eventExternalIdsToRemove),
+              calendarChannelId: calendarChannel.id,
+            });
+
+            await this.calendarEventCleanerService.deleteOrphanedCalendarEvents(
+              {
+                calendarEventIds: associationsToDelete.map(
+                  ({ calendarEventId }) => calendarEventId,
+                ),
+                workspaceId,
+              },
             );
-
-          await calendarChannelEventAssociationRepository.delete({
-            eventExternalId: Any(cancelledEventExternalIds),
-            calendarChannelId: calendarChannel.id,
-          });
-
-          await this.calendarEventCleanerService.cleanWorkspaceCalendarEvents(
-            workspaceId,
-          );
+          }
 
           if (eventIdsToFetch.length < CALENDAR_EVENT_IMPORT_BATCH_SIZE) {
             await this.calendarChannelSyncStatusService.markAsCalendarEventSyncCompleted(

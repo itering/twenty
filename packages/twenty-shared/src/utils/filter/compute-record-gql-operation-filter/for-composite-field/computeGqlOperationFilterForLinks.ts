@@ -1,5 +1,5 @@
 import {
-  ViewFilterOperand as RecordFilterOperand,
+  RecordFilterOperand,
   type CompositeFieldSubFieldName,
   type LinksFilter,
   type PartialFieldMetadataItem,
@@ -92,7 +92,6 @@ export const computeGqlOperationFilterForLinks = ({
       default: {
         throw new Error( // TODO
           `Unknown subfield name ${subFieldName}`,
-          // 'UNKNOWN_SUBFIELD_NAME',
         );
       }
     }

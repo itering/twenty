@@ -1,13 +1,15 @@
 import { Command } from 'nest-commander';
 import { isDefined } from 'twenty-shared/utils';
-import { EntityMetadataNotFoundError } from 'typeorm/error/EntityMetadataNotFoundError';
+import { isWorkspaceObjectNotFoundError } from 'src/database/commands/upgrade-version-command/utils/is-workspace-object-not-found-error.util';
 import { v4 as uuidv4 } from 'uuid';
 
 import { ProvisionedWorkspaceCommandRunner } from 'src/database/commands/command-runners/provisioned-workspace.command-runner';
 import { WorkspaceIteratorService } from 'src/database/commands/command-runners/workspace-iterator.service';
 import { type RunOnWorkspaceArgs } from 'src/database/commands/command-runners/workspace.command-runner';
 import { RegisteredWorkspaceCommand } from 'src/engine/core-modules/upgrade/decorators/registered-workspace-command.decorator';
-import { type WorkflowWorkspaceEntity } from 'src/modules/workflow/common/standard-objects/workflow.workspace-entity';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
+import { type LegacyWorkflowWorkspaceEntity } from 'src/database/commands/upgrade-version-command/2-23/types/legacy-workflow-workspace-entity.type';
 
 // Full rebuild of the core workflow rows for a workspace once
 // coreWorkflowId is provisioned. Per workspace, in one transaction:
@@ -24,6 +26,7 @@ import { type WorkflowWorkspaceEntity } from 'src/modules/workflow/common/standa
 export class BackfillWorkflowCoreLinksCommand extends ProvisionedWorkspaceCommandRunner {
   constructor(
     protected readonly workspaceIteratorService: WorkspaceIteratorService,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
   ) {
     super(workspaceIteratorService);
   }
@@ -41,17 +44,21 @@ export class BackfillWorkflowCoreLinksCommand extends ProvisionedWorkspaceComman
       return;
     }
 
-    let workspaceWorkflows: WorkflowWorkspaceEntity[];
+    let workspaceWorkflows: LegacyWorkflowWorkspaceEntity[];
 
     try {
-      const workflowRepository =
-        dataSource.getRepository<WorkflowWorkspaceEntity>('workflow', {
-          shouldBypassPermissionChecks: true,
-        });
+      workspaceWorkflows =
+        await this.workspaceOrmManager.executeInWorkspaceContext(
+          async () => {
+            const workflowRepository =
+              this.workspaceOrmManager.getRepositoryWithoutPermissionChecks<LegacyWorkflowWorkspaceEntity>('workflow');
 
-      workspaceWorkflows = await workflowRepository.find();
+            return workflowRepository.find();
+          },
+          buildSystemAuthContext(workspaceId),
+        );
     } catch (error) {
-      if (error instanceof EntityMetadataNotFoundError) {
+      if (isWorkspaceObjectNotFoundError(error)) {
         this.logger.log(
           `workflow object does not exist for workspace ${workspaceId}, skipping`,
         );

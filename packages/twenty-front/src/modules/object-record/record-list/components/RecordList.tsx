@@ -1,15 +1,23 @@
+import { RecordGroupTabs } from '@/object-record/record-group/components/RecordGroupTabs';
+import { RecordGroupTabsPortalProvider } from '@/object-record/record-group/components/RecordGroupTabsPortalProvider';
+import { RecordIndexRemoveSortingModal } from '@/object-record/record-index/components/RecordIndexRemoveSortingModal';
 import { hasRecordGroupsComponentSelector } from '@/object-record/record-group/states/selectors/hasRecordGroupsComponentSelector';
 import { RecordListBody } from '@/object-record/record-list/components/RecordListBody';
+import { RecordListDragDropProvider } from '@/object-record/record-list/components/RecordListDragDropProvider';
 import { RecordListFieldTooltip } from '@/object-record/record-list/components/RecordListFieldTooltip';
 import { RecordListRecordGroupsBody } from '@/object-record/record-list/components/RecordListRecordGroupsBody';
-import { RecordListResponsiveFieldCountEffect } from '@/object-record/record-list/components/RecordListResponsiveFieldCountEffect';
+import { RecordListResponsiveFieldsEffect } from '@/object-record/record-list/components/RecordListResponsiveFieldsEffect';
+import { RecordListSSESubscribeEffect } from '@/object-record/record-list/components/RecordListSSESubscribeEffect';
+import { RECORD_LIST_ROW_DND_TYPE } from '@/object-record/record-list/constants/RecordListRowDndType';
 import { RecordListComponentInstanceContext } from '@/object-record/record-list/states/contexts/RecordListComponentInstanceContext';
+import { RecordSelectionEscapeHotkeyEffect } from '@/object-record/record-selection/components/RecordSelectionEscapeHotkeyEffect';
 import { ScrollWrapper } from '@/ui/utilities/scroll/components/ScrollWrapper';
 import { useAvailableComponentInstanceIdOrThrow } from '@/ui/utilities/state/component-state/hooks/useAvailableComponentInstanceIdOrThrow';
 import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
+import { ViewType } from '@/views/types/ViewType';
 import { styled } from '@linaria/react';
 import { useState } from 'react';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 const StyledContainer = styled.div`
   box-sizing: border-box;
@@ -34,16 +42,30 @@ export const RecordList = () => {
 
   return (
     <StyledContainer ref={setContainerElement}>
-      <RecordListResponsiveFieldCountEffect
-        containerElement={containerElement}
-      />
-      <ScrollWrapper
-        componentInstanceId={`scroll-wrapper-record-list-${recordListId}`}
-        defaultEnableXScroll={false}
-      >
-        {hasRecordGroups ? <RecordListRecordGroupsBody /> : <RecordListBody />}
-      </ScrollWrapper>
-      <RecordListFieldTooltip />
+      <RecordListResponsiveFieldsEffect containerElement={containerElement} />
+      <RecordSelectionEscapeHotkeyEffect />
+      <RecordListSSESubscribeEffect />
+      <RecordIndexRemoveSortingModal />
+      <RecordGroupTabsPortalProvider>
+        <RecordListFieldTooltip>
+          <ScrollWrapper
+            componentInstanceId={`scroll-wrapper-record-list-${recordListId}`}
+            defaultEnableXScroll={false}
+          >
+            <RecordListDragDropProvider>
+              <RecordGroupTabs
+                viewType={ViewType.LIST}
+                dndType={RECORD_LIST_ROW_DND_TYPE}
+              />
+              {hasRecordGroups ? (
+                <RecordListRecordGroupsBody />
+              ) : (
+                <RecordListBody />
+              )}
+            </RecordListDragDropProvider>
+          </ScrollWrapper>
+        </RecordListFieldTooltip>
+      </RecordGroupTabsPortalProvider>
     </StyledContainer>
   );
 };

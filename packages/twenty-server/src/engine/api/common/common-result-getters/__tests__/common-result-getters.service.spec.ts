@@ -1,13 +1,12 @@
+import { Test } from '@nestjs/testing';
 import {
   FieldMetadataType,
   FileFolder,
   RelationType,
-  type ObjectRecord,
 } from 'twenty-shared/types';
 
 import { CommonResultGettersService } from 'src/engine/api/common/common-result-getters/common-result-getters.service';
-import { getFlatFieldsFromFlatObjectMetadata } from 'src/engine/api/graphql/workspace-schema-builder/utils/get-flat-fields-for-flat-object-metadata.util';
-import { type FileUrlService } from 'src/engine/core-modules/file/file-url/file-url.service';
+import { FileUrlService } from 'src/engine/core-modules/file/file-url/file-url.service';
 import { createEmptyFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/constant/create-empty-flat-entity-maps.constant';
 import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
 import { addFlatEntityToFlatEntityMapsOrThrow } from 'src/engine/metadata-modules/flat-entity/utils/add-flat-entity-to-flat-entity-maps-or-throw.util';
@@ -16,235 +15,102 @@ import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-m
 import { getFlatObjectMetadataMock } from 'src/engine/metadata-modules/flat-object-metadata/__mocks__/get-flat-object-metadata.mock';
 import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 
-jest.mock(
-  'src/engine/api/graphql/workspace-schema-builder/utils/get-flat-fields-for-flat-object-metadata.util',
-  () => {
-    const actual = jest.requireActual(
-      'src/engine/api/graphql/workspace-schema-builder/utils/get-flat-fields-for-flat-object-metadata.util',
-    );
-
-    return {
-      ...actual,
-      getFlatFieldsFromFlatObjectMetadata: jest.fn(
-        actual.getFlatFieldsFromFlatObjectMetadata,
-      ),
-    };
-  },
-);
-
-const createField = ({
-  id,
-  objectMetadataId,
-  ...overrides
-}: Pick<FlatFieldMetadata, 'id' | 'name' | 'objectMetadataId' | 'type'> &
-  Partial<FlatFieldMetadata>): FlatFieldMetadata =>
-  getFlatFieldMetadataMock({
-    id,
-    universalIdentifier: `${id}-universal-identifier`,
-    objectMetadataId,
-    objectMetadataUniversalIdentifier: `${objectMetadataId}-universal-identifier`,
-    ...overrides,
-  });
-
 const buildFlatEntityMaps = <
   TFlatEntity extends FlatFieldMetadata | FlatObjectMetadata,
 >(
   flatEntities: TFlatEntity[],
 ): FlatEntityMaps<TFlatEntity> =>
-  flatEntities.reduce(
-    (maps, flatEntity) =>
-      addFlatEntityToFlatEntityMapsOrThrow({
-        flatEntity,
-        flatEntityMaps: maps,
-      }),
-    createEmptyFlatEntityMaps() as FlatEntityMaps<TFlatEntity>,
+  flatEntities.reduce<FlatEntityMaps<TFlatEntity>>(
+    (flatEntityMaps, flatEntity) =>
+      addFlatEntityToFlatEntityMapsOrThrow({ flatEntity, flatEntityMaps }),
+    createEmptyFlatEntityMaps(),
   );
+
+const attachmentsField = getFlatFieldMetadataMock({
+  universalIdentifier: 'company-attachments',
+  objectMetadataId: 'company',
+  type: FieldMetadataType.RELATION,
+  name: 'attachments',
+  settings: { relationType: RelationType.ONE_TO_MANY },
+  relationTargetObjectMetadataId: 'attachment',
+});
+
+const fileField = getFlatFieldMetadataMock({
+  universalIdentifier: 'attachment-file',
+  objectMetadataId: 'attachment',
+  type: FieldMetadataType.FILES,
+  name: 'file',
+});
+
+const company = getFlatObjectMetadataMock({
+  id: 'company',
+  universalIdentifier: 'company',
+  nameSingular: 'company',
+  fieldIds: [attachmentsField.id],
+});
+
+const attachment = getFlatObjectMetadataMock({
+  id: 'attachment',
+  universalIdentifier: 'attachment',
+  nameSingular: 'attachment',
+  fieldIds: [fileField.id],
+});
 
 describe('CommonResultGettersService', () => {
-  const signFileByIdUrl = jest.fn(
-    async ({ fileId }: { fileId: string }) => `signed-${fileId}`,
-  );
-  const fileUrlService = {
-    signFileByIdUrl,
-  } as unknown as FileUrlService;
-
-  let service: CommonResultGettersService;
-
-  beforeEach(() => {
-    service = new CommonResultGettersService(fileUrlService);
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('runs a shared field handler once and preserves fields without metadata', async () => {
-    const objectMetadataId = 'document-object-id';
-    const filesField = createField({
-      id: 'document-files-field-id',
-      name: 'files',
-      objectMetadataId,
-      type: FieldMetadataType.FILES,
-    });
-    const attachmentsField = createField({
-      id: 'document-attachments-field-id',
-      name: 'attachments',
-      objectMetadataId,
-      type: FieldMetadataType.FILES,
-    });
-    const objectMetadata = getFlatObjectMetadataMock({
-      id: objectMetadataId,
-      universalIdentifier: 'document-object-universal-identifier',
-      nameSingular: 'document',
-      namePlural: 'documents',
-      fieldIds: [filesField.id, attachmentsField.id],
-    });
-    const flatFieldMetadataMaps = buildFlatEntityMaps([
-      filesField,
-      attachmentsField,
-    ]);
-    const flatObjectMetadataMaps =
-      createEmptyFlatEntityMaps() as FlatEntityMaps<FlatObjectMetadata>;
-    const record: ObjectRecord = {
-      id: 'document-id',
-      files: [
-        {
-          fileId: 'file-id',
-          label: 'document',
-          extension: 'pdf',
-        },
+  it('signs files of records loaded under an aliased relation', async () => {
+    const signFileByIdUrl = jest.fn().mockResolvedValue('signed-url');
+    const module = await Test.createTestingModule({
+      providers: [
+        CommonResultGettersService,
+        { provide: FileUrlService, useValue: { signFileByIdUrl } },
       ],
-      attachments: [
-        {
-          fileId: 'attachment-id',
-          label: 'attachment',
-          extension: 'pdf',
-        },
-      ],
-      ownerId: 'owner-id',
-    };
+    }).compile();
+    const service = module.get(CommonResultGettersService);
 
-    const result = await service.processRecord(
-      record,
-      objectMetadata,
-      flatObjectMetadataMaps,
-      flatFieldMetadataMaps,
-      'workspace-id',
-    );
-
-    expect(result).toEqual({
-      ...record,
-      files: [
-        {
-          fileId: 'file-id',
-          label: 'document',
-          extension: 'pdf',
-          url: 'signed-file-id',
-        },
-      ],
-      attachments: [
-        {
-          fileId: 'attachment-id',
-          label: 'attachment',
-          extension: 'pdf',
-          url: 'signed-attachment-id',
-        },
-      ],
-    });
-    expect(signFileByIdUrl).toHaveBeenCalledTimes(2);
-    expect(signFileByIdUrl).toHaveBeenCalledWith({
-      fileId: 'file-id',
-      workspaceId: 'workspace-id',
-      fileFolder: FileFolder.FilesField,
-    });
-    expect(signFileByIdUrl).toHaveBeenCalledWith({
-      fileId: 'attachment-id',
-      workspaceId: 'workspace-id',
-      fileFolder: FileFolder.FilesField,
-    });
-  });
-
-  it('resolves field metadata once per object type within a single invocation', async () => {
-    const companyObjectMetadataId = 'company-object-id';
-    const personObjectMetadataId = 'person-object-id';
-    const companyNameField = createField({
-      id: 'company-name-field-id',
-      name: 'name',
-      objectMetadataId: companyObjectMetadataId,
-      type: FieldMetadataType.TEXT,
-    });
-    const companyPeopleField = createField({
-      id: 'company-people-field-id',
-      name: 'people',
-      objectMetadataId: companyObjectMetadataId,
-      type: FieldMetadataType.RELATION,
-      relationTargetObjectMetadataId: personObjectMetadataId,
-      settings: { relationType: RelationType.ONE_TO_MANY },
-    });
-    const personNameField = createField({
-      id: 'person-name-field-id',
-      name: 'name',
-      objectMetadataId: personObjectMetadataId,
-      type: FieldMetadataType.TEXT,
-    });
-    const companyObjectMetadata = getFlatObjectMetadataMock({
-      id: companyObjectMetadataId,
-      universalIdentifier: 'company-object-universal-identifier',
-      nameSingular: 'company',
-      namePlural: 'companies',
-      fieldIds: [companyNameField.id, companyPeopleField.id],
-    });
-    const personObjectMetadata = getFlatObjectMetadataMock({
-      id: personObjectMetadataId,
-      universalIdentifier: 'person-object-universal-identifier',
-      nameSingular: 'person',
-      namePlural: 'people',
-      fieldIds: [personNameField.id],
-    });
-    const flatFieldMetadataMaps = buildFlatEntityMaps([
-      companyNameField,
-      companyPeopleField,
-      personNameField,
-    ]);
-    const flatObjectMetadataMaps = buildFlatEntityMaps([
-      companyObjectMetadata,
-      personObjectMetadata,
-    ]);
-    const records: ObjectRecord[] = [
-      {
+    const processedRecord = await service.processRecord({
+      record: {
         id: 'company-1',
-        name: 'Acme',
-        people: [
-          { id: 'person-1', name: 'Alice' },
-          { id: 'person-2', name: 'Bob' },
+        files: [
+          {
+            id: 'attachment-1',
+            file: [{ fileId: 'file-1', label: 'a.png', extension: 'png' }],
+          },
         ],
       },
-      {
-        id: 'company-2',
-        name: 'Globex',
-        people: [{ id: 'person-3', name: 'Carol' }],
+      flatObjectMetadata: company,
+      flatObjectMetadataMaps: buildFlatEntityMaps([company, attachment]),
+      flatFieldMetadataMaps: buildFlatEntityMaps([attachmentsField, fileField]),
+      workspaceId: 'workspace-id',
+      selection: {
+        columns: {},
+        aggregates: {},
+        relations: {
+          files: {
+            fieldName: 'attachments',
+            selection: { columns: {}, aggregates: {}, relations: {} },
+          },
+        },
       },
-    ];
+    });
 
-    const result = await service.processRecordArray(
-      records,
-      companyObjectMetadata,
-      flatObjectMetadataMaps,
-      flatFieldMetadataMaps,
-      'workspace-id',
-    );
-
-    expect(result).toEqual(records);
-    expect(getFlatFieldsFromFlatObjectMetadata).toHaveBeenCalledTimes(2);
-
-    await service.processRecordArray(
-      records,
-      companyObjectMetadata,
-      flatObjectMetadataMaps,
-      flatFieldMetadataMaps,
-      'workspace-id',
-    );
-
-    expect(getFlatFieldsFromFlatObjectMetadata).toHaveBeenCalledTimes(4);
+    expect(processedRecord.files).toEqual([
+      {
+        id: 'attachment-1',
+        file: [
+          {
+            fileId: 'file-1',
+            label: 'a.png',
+            extension: 'png',
+            url: 'signed-url',
+          },
+        ],
+      },
+    ]);
+    expect(signFileByIdUrl).toHaveBeenCalledTimes(1);
+    expect(signFileByIdUrl).toHaveBeenCalledWith({
+      fileId: 'file-1',
+      workspaceId: 'workspace-id',
+      fileFolder: FileFolder.FilesField,
+    });
   });
 });

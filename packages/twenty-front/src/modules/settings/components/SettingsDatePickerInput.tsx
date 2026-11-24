@@ -10,19 +10,16 @@ import {
   useFloating,
 } from '@floating-ui/react';
 
-import {
-  DATE_TIME_PICKER_MONTH_YEAR_PANEL_DROPDOWN_ID,
-  DateTimePicker,
-  MONTH_AND_YEAR_DROPDOWN_MONTH_SELECT_ID,
-  MONTH_AND_YEAR_DROPDOWN_YEAR_SELECT_ID,
-} from '@/ui/input/components/internal/date/components/DateTimePicker';
+import { DateTimePicker } from '@/ui/input/components/internal/date/components/DateTimePicker';
+import { useIsDatePickerDropdownOpen } from '@/ui/input/components/internal/date/hooks/useIsDatePickerDropdownOpen';
 import { useUserTimezone } from '@/ui/input/components/internal/date/hooks/useUserTimezone';
 import { OverlayContainer } from '@/ui/layout/overlay/components/OverlayContainer';
+import { StyledOverlayPortalLayer } from '@/ui/layout/overlay/components/StyledOverlayPortalLayer';
 import { ParentClickOutsideIdContext } from '@/ui/utilities/pointer-event/contexts/ParentClickOutsideIdContext';
 import { useListenClickOutside } from '@/ui/utilities/pointer-event/hooks/useListenClickOutside';
 import { isDefined } from 'twenty-shared/utils';
 import { IconCalendar } from 'twenty-ui/icon';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 const SETTINGS_DATE_PICKER_CLICK_OUTSIDE_ID = 'settings-date-picker-floating';
 
@@ -64,12 +61,13 @@ const StyledIconContainer = styled.div`
   display: flex;
 `;
 
-export type SettingsDatePickerInputProps = {
+type SettingsDatePickerInputProps = {
   label?: string;
   instanceId?: string;
   value: Date | undefined;
   onChange: (date: Date | undefined) => void;
   placeholder?: string;
+  isInModal?: boolean;
 };
 
 export const SettingsDatePickerInput = ({
@@ -78,6 +76,7 @@ export const SettingsDatePickerInput = ({
   value,
   onChange,
   placeholder,
+  isInModal = false,
 }: SettingsDatePickerInputProps) => {
   const { t } = useLingui();
   const [isOpen, setIsOpen] = useState(false);
@@ -86,6 +85,7 @@ export const SettingsDatePickerInput = ({
   const generatedId = useId();
 
   const pickerInstanceId = instanceId ?? label ?? generatedId;
+  const dateTimePickerInstanceId = `settings-date-picker-${pickerInstanceId}`;
 
   const { refs, floatingStyles } = useFloating({
     open: isOpen,
@@ -98,17 +98,20 @@ export const SettingsDatePickerInput = ({
     setIsOpen(false);
   };
 
+  const { isDatePickerDropdownOpen } = useIsDatePickerDropdownOpen();
+
   useListenClickOutside({
     refs: [containerRef],
-    listenerId: `settings-date-picker-${pickerInstanceId}`,
-    callback: handleClose,
+    listenerId: dateTimePickerInstanceId,
+    callback: () => {
+      if (isDatePickerDropdownOpen(dateTimePickerInstanceId)) {
+        return;
+      }
+
+      handleClose();
+    },
     enabled: isOpen,
-    excludedClickOutsideIds: [
-      SETTINGS_DATE_PICKER_CLICK_OUTSIDE_ID,
-      DATE_TIME_PICKER_MONTH_YEAR_PANEL_DROPDOWN_ID,
-      MONTH_AND_YEAR_DROPDOWN_MONTH_SELECT_ID,
-      MONTH_AND_YEAR_DROPDOWN_YEAR_SELECT_ID,
-    ],
+    excludedClickOutsideIds: [SETTINGS_DATE_PICKER_CLICK_OUTSIDE_ID],
   });
 
   const handleDateTimeChange = (newDateTime: Temporal.ZonedDateTime | null) => {
@@ -117,7 +120,8 @@ export const SettingsDatePickerInput = ({
     }
   };
 
-  const handleDateTimeClose = (_newDateTime: Temporal.ZonedDateTime | null) => {
+  const handleDateTimeClose = (newDateTime: Temporal.ZonedDateTime | null) => {
+    handleDateTimeChange(newDateTime);
     handleClose();
   };
 
@@ -162,17 +166,18 @@ export const SettingsDatePickerInput = ({
       </StyledInput>
       {isOpen && (
         <FloatingPortal>
-          <div
+          <StyledOverlayPortalLayer
             ref={refs.setFloating}
             style={floatingStyles}
             data-click-outside-id={SETTINGS_DATE_PICKER_CLICK_OUTSIDE_ID}
+            isAboveModal={isInModal}
           >
             <OverlayContainer>
               <ParentClickOutsideIdContext.Provider
                 value={SETTINGS_DATE_PICKER_CLICK_OUTSIDE_ID}
               >
                 <DateTimePicker
-                  instanceId={`settings-date-picker-${pickerInstanceId}`}
+                  instanceId={dateTimePickerInstanceId}
                   date={zonedDateTime}
                   onChange={handleDateTimeChange}
                   onClose={handleDateTimeClose}
@@ -181,7 +186,7 @@ export const SettingsDatePickerInput = ({
                 />
               </ParentClickOutsideIdContext.Provider>
             </OverlayContainer>
-          </div>
+          </StyledOverlayPortalLayer>
         </FloatingPortal>
       )}
     </StyledInputContainer>

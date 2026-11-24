@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 
 import { FieldMetadataType } from 'twenty-shared/types';
-import { isDefined } from 'twenty-shared/utils';
+import { isDefined, splitFilterArrayItems } from 'twenty-shared/utils';
 
 import { type FieldValue } from 'src/engine/api/rest/core/types/field-value.type';
 
@@ -18,9 +18,9 @@ export const formatFieldValue = (
     }
     const stringValues = value.substring(1, value.length - 1);
 
-    return stringValues
-      .split(',')
-      .map((value) => formatFieldValue(value, fieldType));
+    return splitFilterArrayItems(stringValues).map((value) =>
+      formatFieldValue(value, fieldType),
+    );
   }
   if (comparator === 'is') {
     return value;

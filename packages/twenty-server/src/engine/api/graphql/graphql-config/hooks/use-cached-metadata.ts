@@ -5,10 +5,10 @@ import { type Request } from 'express';
 import { type Plugin } from 'graphql-yoga';
 import { isDefined } from 'twenty-shared/utils';
 
-import { type WorkspaceCacheKeyName } from 'src/engine/workspace-cache/types/workspace-cache-key.type';
+import { type WorkspaceCacheOrDerivedCacheKeyName } from 'src/engine/workspace-cache/types/workspace-cache-key.type';
 
 export type CachedOperationConfig = {
-  dependencies: WorkspaceCacheKeyName[];
+  dependencies: WorkspaceCacheOrDerivedCacheKeyName[];
   scope: 'workspace' | 'userWorkspace';
 };
 
@@ -20,11 +20,13 @@ export type CacheMetadataPluginConfig = {
   operationsToCache: Record<string, CachedOperationConfig>;
   dependencyHashGetter: (
     workspaceId: string,
-    cacheKeyNames: WorkspaceCacheKeyName[],
+    cacheKeyNames: WorkspaceCacheOrDerivedCacheKeyName[],
   ) => Promise<string>;
 };
 
-export function useCachedMetadata(config: CacheMetadataPluginConfig): Plugin {
+export function useCachedMetadata(
+  config: CacheMetadataPluginConfig,
+): Plugin<object, { req: Request }> {
   const computeCacheKey = async ({
     operationName,
     operationConfig,
@@ -132,7 +134,7 @@ export function useCachedMetadata(config: CacheMetadataPluginConfig): Plugin {
   return {
     onRequest: async ({ endResponse, serverContext }) => {
       // TODO: we should probably override the graphql-yoga request type to include the workspace and locale
-      const request = (serverContext as unknown as { req: Request }).req;
+      const request = serverContext.req;
       const workspaceId = request.workspace?.id;
 
       if (!workspaceId) {
@@ -175,7 +177,7 @@ export function useCachedMetadata(config: CacheMetadataPluginConfig): Plugin {
       }
     },
     onResponse: async ({ response, serverContext }) => {
-      const request = (serverContext as unknown as { req: Request }).req;
+      const request = serverContext.req;
 
       if (!request.workspace?.id) {
         return;

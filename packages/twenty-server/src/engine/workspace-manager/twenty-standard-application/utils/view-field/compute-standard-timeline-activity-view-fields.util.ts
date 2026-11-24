@@ -8,18 +8,19 @@ export const computeStandardTimelineActivityViewFields = (
   args: Omit<CreateStandardViewFieldArgs<'timelineActivity'>, 'context'>,
 ): Record<string, FlatViewField> => {
   return {
-    allTimelineActivitiesName: createStandardViewFieldFlatMetadata({
-      ...args,
-      objectName: 'timelineActivity',
-      context: {
-        viewName: 'allTimelineActivities',
-        viewFieldName: 'name',
-        fieldName: 'name',
-        position: 0,
-        isVisible: true,
-        size: 210,
-      },
-    }),
+    allTimelineActivitiesLinkedRecordCachedName:
+      createStandardViewFieldFlatMetadata({
+        ...args,
+        objectName: 'timelineActivity',
+        context: {
+          viewName: 'allTimelineActivities',
+          viewFieldName: 'linkedRecordCachedName',
+          fieldName: 'linkedRecordCachedName',
+          position: 0,
+          isVisible: true,
+          size: 210,
+        },
+      }),
     allTimelineActivitiesHappensAt: createStandardViewFieldFlatMetadata({
       ...args,
       objectName: 'timelineActivity',
@@ -95,31 +96,6 @@ export const computeStandardTimelineActivityViewFields = (
         size: 150,
       },
     }),
-    allTimelineActivitiesTargetWorkflow: createStandardViewFieldFlatMetadata({
-      ...args,
-      objectName: 'timelineActivity',
-      context: {
-        viewName: 'allTimelineActivities',
-        viewFieldName: 'targetWorkflow',
-        fieldName: 'targetWorkflow',
-        position: 7,
-        isVisible: true,
-        size: 150,
-      },
-    }),
-    allTimelineActivitiesTargetWorkflowVersion:
-      createStandardViewFieldFlatMetadata({
-        ...args,
-        objectName: 'timelineActivity',
-        context: {
-          viewName: 'allTimelineActivities',
-          viewFieldName: 'targetWorkflowVersion',
-          fieldName: 'targetWorkflowVersion',
-          position: 8,
-          isVisible: true,
-          size: 150,
-        },
-      }),
     allTimelineActivitiesTargetWorkflowRun: createStandardViewFieldFlatMetadata(
       {
         ...args,

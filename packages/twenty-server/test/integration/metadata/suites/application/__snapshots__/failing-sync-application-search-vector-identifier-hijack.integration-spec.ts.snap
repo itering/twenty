@@ -10,8 +10,13 @@ exports[`Sync application should reject hijacking the searchVector system field 
           "errors": [
             {
               "code": "FIELD_MUTATION_NOT_ALLOWED",
-              "message": "System fields only allow updating: universalSettings, isActive. Forbidden properties: description, icon, isUIEditable",
+              "message": "System fields only allow updating: universalSettings, isActive. Forbidden properties: description, icon, isUIEditable, disabledFieldPermissionActions",
               "userFriendlyMessage": "System fields cannot be updated",
+            },
+            {
+              "code": "NON_UPDATABLE_PROPERTY_DIVERGENCE",
+              "message": "fieldMetadata property "isSystem" cannot be updated",
+              "userFriendlyMessage": "Property isSystem cannot be updated",
             },
           ],
           "flatEntityMinimalInformation": {
@@ -80,13 +85,30 @@ exports[`Sync application should reject hijacking the searchVector system field 
           "status": "fail",
           "type": "create",
         },
+        {
+          "errors": [
+            {
+              "code": "INVALID_VIEW_DATA",
+              "message": "Field metadata not found",
+              "userFriendlyMessage": "Field metadata not found",
+            },
+          ],
+          "flatEntityMinimalInformation": {
+            "fieldMetadataUniversalIdentifier": Any<String>,
+            "universalIdentifier": Any<String>,
+            "viewUniversalIdentifier": Any<String>,
+          },
+          "metadataName": "viewField",
+          "status": "fail",
+          "type": "create",
+        },
       ],
     },
-    "message": "Validation failed for 1 fieldMetadata, 1 viewField",
+    "message": "Validation failed for 1 fieldMetadata, 2 viewFields",
     "summary": {
       "fieldMetadata": 1,
-      "totalErrors": 2,
-      "viewField": 1,
+      "totalErrors": 3,
+      "viewField": 2,
     },
     "userFriendlyMessage": "Many validation errors",
   },
@@ -105,7 +127,7 @@ exports[`Sync application should reject hijacking the searchVector system field 
           "errors": [
             {
               "code": "FIELD_MUTATION_NOT_ALLOWED",
-              "message": "System fields only allow updating: universalSettings, isActive. Forbidden properties: description, icon, label, name, isUIEditable",
+              "message": "System fields only allow updating: universalSettings, isActive. Forbidden properties: description, icon, label, name, isUIEditable, disabledFieldPermissionActions",
               "userFriendlyMessage": "System fields cannot be updated",
             },
             {
@@ -113,6 +135,16 @@ exports[`Sync application should reject hijacking the searchVector system field 
               "message": "Field type TS_VECTOR must be named "searchVector", got "stolenSearchVector"",
               "userFriendlyMessage": "Field type TS_VECTOR must be named "searchVector"",
               "value": "stolenSearchVector",
+            },
+            {
+              "code": "NON_UPDATABLE_PROPERTY_DIVERGENCE",
+              "message": "fieldMetadata property "type" cannot be updated",
+              "userFriendlyMessage": "Property type cannot be updated",
+            },
+            {
+              "code": "NON_UPDATABLE_PROPERTY_DIVERGENCE",
+              "message": "fieldMetadata property "isSystem" cannot be updated",
+              "userFriendlyMessage": "Property isSystem cannot be updated",
             },
           ],
           "flatEntityMinimalInformation": {

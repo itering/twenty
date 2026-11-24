@@ -1,4 +1,3 @@
-import { type GraphQLFieldResolver } from 'graphql';
 import {
   type ObjectRecord,
   type OrderByWithGroupBy,
@@ -10,14 +9,10 @@ import {
   type ObjectRecordOrderBy,
 } from 'src/engine/api/graphql/workspace-query-builder/interfaces/object-record.interface';
 
+import { type ShareWithInput } from 'src/engine/permissions/record-share/types/share-with-input.type';
 import { RESOLVER_METHOD_NAMES } from 'src/engine/api/graphql/workspace-resolver-builder/constants/resolver-method-names';
-import { type workspaceResolverBuilderMethodNames } from 'src/engine/api/graphql/workspace-resolver-builder/factories/factories';
+import { type workspaceResolverBuilderMethodNames } from 'src/engine/api/graphql/workspace-resolver-builder/constants/workspace-resolver-builder-method-names';
 
-// oxlint-disable-next-line typescript/no-explicit-any
-export type Resolver<Args = any> = GraphQLFieldResolver<any, any, Args>;
-
-// Use RESOLVER_METHOD_NAMES as the single source of truth for operation names
-// This avoids duplication and ensures consistency across the codebase
 export const ResolverArgsType = RESOLVER_METHOD_NAMES;
 
 export interface FindManyResolverArgs<
@@ -49,6 +44,7 @@ export interface CreateOneResolverArgs<
 > {
   data: Data;
   upsert?: boolean;
+  shareWith?: ShareWithInput[];
 }
 
 export interface CreateManyResolverArgs<
@@ -56,6 +52,7 @@ export interface CreateManyResolverArgs<
 > {
   data: Data[];
   upsert?: boolean;
+  shareWith?: ShareWithInput[];
 }
 
 export interface GroupByResolverArgs<Filter = ObjectRecordFilter> {
@@ -126,11 +123,6 @@ export type WorkspaceResolverBuilderMutationMethodNames =
 export type WorkspaceResolverBuilderMethodNames =
   | WorkspaceResolverBuilderQueryMethodNames
   | WorkspaceResolverBuilderMutationMethodNames;
-
-export interface WorkspaceResolverBuilderMethods {
-  readonly queries: readonly WorkspaceResolverBuilderQueryMethodNames[];
-  readonly mutations: readonly WorkspaceResolverBuilderMutationMethodNames[];
-}
 
 export type ResolverArgs =
   | CreateManyResolverArgs

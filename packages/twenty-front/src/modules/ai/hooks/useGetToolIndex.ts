@@ -1,12 +1,20 @@
-import { GET_TOOL_INDEX } from '@/ai/graphql/queries/getToolIndex';
 import { useQuery } from '@apollo/client/react';
 
-import { type GetToolIndexQuery } from '~/generated-metadata/graphql';
+import {
+  GetToolIndexDocument,
+  type GetToolIndexQuery,
+} from '~/generated-metadata/graphql';
 
 const EMPTY_TOOL_INDEX: NonNullable<GetToolIndexQuery['getToolIndex']> = [];
 
-export const useGetToolIndex = () => {
-  const { data, loading, error } = useQuery<GetToolIndexQuery>(GET_TOOL_INDEX);
+export const useGetToolIndex = ({
+  skip = false,
+  isRefreshedOnMount = false,
+}: { skip?: boolean; isRefreshedOnMount?: boolean } = {}) => {
+  const { data, loading, error } = useQuery(GetToolIndexDocument, {
+    fetchPolicy: isRefreshedOnMount ? 'cache-and-network' : 'cache-first',
+    skip,
+  });
 
   return {
     toolIndex: data?.getToolIndex ?? EMPTY_TOOL_INDEX,

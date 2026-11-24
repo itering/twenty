@@ -18,6 +18,7 @@ const VALID_PAYLOAD = {
   twentyExperience: ['WORKFLOWS'],
   twentyExperienceNotes: VALID_EXPERIENCE_NOTES,
   twentyExperienceProofLink: 'https://www.loom.com/share/example',
+  acceptsTerms: true,
 };
 
 const VALID_BODY = JSON.stringify(VALID_PAYLOAD);
@@ -303,6 +304,27 @@ describe('POST /api/partner-application', () => {
     const { POST } = await loadRoute();
     const response = await POST(buildRequest({ ip: '203.0.113.26' }));
     expect(response.status).toBe(502);
+  });
+
+  it('returns 502 when the webhook answers success:true instead of ok:true', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ success: true }), { status: 200 }),
+      );
+    const { POST } = await loadRoute();
+    const response = await POST(buildRequest({ ip: '203.0.113.27' }));
+    expect(response.status).toBe(502);
+  });
+
+  it('returns 503 without calling the webhook when the secret is not set', async () => {
+    delete process.env.PARTNER_APPLICATION_SECRET;
+    const fetchSpy = jest.fn();
+    global.fetch = fetchSpy;
+    const { POST } = await loadRoute();
+    const response = await POST(buildRequest({ ip: '203.0.113.28' }));
+    expect(response.status).toBe(503);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('returns 504 when the webhook surfaces an AbortError (timeout path)', async () => {

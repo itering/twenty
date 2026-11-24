@@ -2,25 +2,29 @@ import { Injectable, Logger } from '@nestjs/common';
 
 import { isNonEmptyString } from '@sniptt/guards';
 import { isDefined } from 'twenty-shared/utils';
-import { type WorkspaceCompanyEnrichmentResult } from 'twenty-shared/workspace';
+import {
+  type WorkspaceCompanyEnrichment,
+  type WorkspaceEnrichmentResult,
+} from 'twenty-shared/workspace';
 
 import { COMPANY_ENRICHMENT_THROTTLE_MAX_REQUESTS } from 'src/engine/core-modules/company-enrichment/constants/company-enrichment-throttle-max-requests.constant';
 import { COMPANY_ENRICHMENT_THROTTLE_WINDOW_MS } from 'src/engine/core-modules/company-enrichment/constants/company-enrichment-throttle-window-ms.constant';
-import { PeopleDataLabsCompanyClientService } from 'src/engine/core-modules/company-enrichment/services/people-data-labs-company-client.service';
+import { EnrichmentThrottleService } from 'src/engine/core-modules/company-enrichment/services/enrichment-throttle.service';
+import { PeopleDataLabsClientService } from 'src/engine/core-modules/company-enrichment/services/people-data-labs-client.service';
 import {
   COMPANY_ENRICHMENT_ATTEMPT_KEY,
   type CompanyEnrichmentAttemptKeyValueTypeMap,
 } from 'src/engine/core-modules/company-enrichment/types/company-enrichment-attempt-key-value.type';
-import { type PeopleDataLabsCompanyEnrichResult } from 'src/engine/core-modules/company-enrichment/types/people-data-labs-company-enrich-result.type';
+import {
+  COMPANY_ENRICHMENT_KEY,
+  type CompanyEnrichmentKeyValueTypeMap,
+} from 'src/engine/core-modules/company-enrichment/types/company-enrichment-key-value.type';
+import { type PeopleDataLabsCompanyData } from 'src/engine/core-modules/company-enrichment/types/people-data-labs-company-data.type';
+import { type PeopleDataLabsEnrichResult } from 'src/engine/core-modules/company-enrichment/types/people-data-labs-enrich-result.type';
 import { toWorkspaceCompanyEnrichment } from 'src/engine/core-modules/company-enrichment/utils/to-workspace-company-enrichment.util';
 import { KeyValuePairType } from 'src/engine/core-modules/key-value-pair/key-value-pair.entity';
 import { KeyValuePairService } from 'src/engine/core-modules/key-value-pair/key-value-pair.service';
 import { readIsCompanyEnrichmentEnabled } from 'src/engine/core-modules/company-enrichment/utils/read-is-company-enrichment-enabled.util';
-import {
-  ThrottlerException,
-  ThrottlerExceptionCode,
-} from 'src/engine/core-modules/throttler/throttler.exception';
-import { ThrottlerService } from 'src/engine/core-modules/throttler/throttler.service';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { UserWorkspaceService } from 'src/engine/core-modules/user-workspace/user-workspace.service';
 import { getDomainFromEmail } from 'src/utils/get-domain-from-email';
@@ -33,10 +37,12 @@ export class CompanyEnrichmentService {
 
   constructor(
     private readonly userWorkspaceService: UserWorkspaceService,
-    private readonly peopleDataLabsCompanyClientService: PeopleDataLabsCompanyClientService,
+    private readonly peopleDataLabsClientService: PeopleDataLabsClientService,
     private readonly twentyConfigService: TwentyConfigService,
-    private readonly throttlerService: ThrottlerService,
-    private readonly keyValuePairService: KeyValuePairService<CompanyEnrichmentAttemptKeyValueTypeMap>,
+    private readonly enrichmentThrottleService: EnrichmentThrottleService,
+    private readonly keyValuePairService: KeyValuePairService<
+      CompanyEnrichmentAttemptKeyValueTypeMap & CompanyEnrichmentKeyValueTypeMap
+    >,
   ) {}
 
   async enrichCompanyForWorkspaceCreator({
@@ -47,7 +53,7 @@ export class CompanyEnrichmentService {
     userId: string;
     email: string;
     workspaceId: string;
-  }): Promise<WorkspaceCompanyEnrichmentResult> {
+  }): Promise<WorkspaceEnrichmentResult<WorkspaceCompanyEnrichment>> {
     if (!this.hasEnrichmentConsumer()) {
       return { outcome: 'unavailable', enrichment: null };
     }
@@ -69,32 +75,22 @@ export class CompanyEnrichmentService {
     }
 
     // Checked before throttling so a disabled feature never burns a throttle token.
-    if (!this.peopleDataLabsCompanyClientService.isEnabled()) {
+    if (!this.peopleDataLabsClientService.isEnabled()) {
       return { outcome: 'unavailable', enrichment: null };
     }
 
-    try {
-      await this.throttlerService.tokenBucketThrottleOrThrow(
-        `company-enrichment:throttler:${workspaceId}`,
-        1,
-        COMPANY_ENRICHMENT_THROTTLE_MAX_REQUESTS,
-        COMPANY_ENRICHMENT_THROTTLE_WINDOW_MS,
-      );
-    } catch (error) {
-      if (
-        error instanceof ThrottlerException &&
-        error.code === ThrottlerExceptionCode.LIMIT_REACHED
-      ) {
-        return { outcome: 'transientError', enrichment: null };
-      }
+    const throttleOutcome = await this.enrichmentThrottleService.consumeToken({
+      throttleKey: `company-enrichment:throttler:${workspaceId}`,
+      maxRequests: COMPANY_ENRICHMENT_THROTTLE_MAX_REQUESTS,
+      windowMs: COMPANY_ENRICHMENT_THROTTLE_WINDOW_MS,
+    });
 
-      throw error;
+    if (throttleOutcome === 'limitReached') {
+      return { outcome: 'transientError', enrichment: null };
     }
 
     const result =
-      await this.peopleDataLabsCompanyClientService.enrichCompanyByDomain(
-        domain,
-      );
+      await this.peopleDataLabsClientService.enrichCompanyByDomain(domain);
 
     const enrichmentResult = this.resolveEnrichmentResult({
       result,
@@ -105,6 +101,14 @@ export class CompanyEnrichmentService {
     // 'skipped' means the feature is disabled (no API key); don't persist the domain in that case.
     if (result.outcome !== 'skipped') {
       await this.recordEnrichmentAttempt({ workspaceId, domain, result });
+    }
+
+    if (enrichmentResult.outcome === 'matched') {
+      await this.storeEnrichment({
+        workspaceId,
+        domain,
+        enrichment: enrichmentResult.enrichment,
+      });
     }
 
     return enrichmentResult;
@@ -119,10 +123,10 @@ export class CompanyEnrichmentService {
     workspaceId,
     domain,
   }: {
-    result: PeopleDataLabsCompanyEnrichResult;
+    result: PeopleDataLabsEnrichResult<PeopleDataLabsCompanyData>;
     workspaceId: string;
     domain: string;
-  }): WorkspaceCompanyEnrichmentResult {
+  }): WorkspaceEnrichmentResult<WorkspaceCompanyEnrichment> {
     if (result.outcome === 'transientError') {
       this.logger.warn(
         `Company enrichment transiently failed for workspace ${workspaceId} (${domain}): ${result.message}`,
@@ -161,7 +165,10 @@ export class CompanyEnrichmentService {
   }: {
     workspaceId: string;
     domain: string;
-    result: Exclude<PeopleDataLabsCompanyEnrichResult, { outcome: 'skipped' }>;
+    result: Exclude<
+      PeopleDataLabsEnrichResult<PeopleDataLabsCompanyData>,
+      { outcome: 'skipped' }
+    >;
   }): Promise<void> {
     // Best-effort telemetry: never let a key-value write failure fail the enrichment.
     // The pre-collapse outcome is recorded so an operator can tell "no PDL match for this
@@ -184,6 +191,32 @@ export class CompanyEnrichmentService {
     } catch (error) {
       this.logger.warn(
         `Failed to record company enrichment attempt for workspace ${workspaceId} (${domain}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  private async storeEnrichment({
+    workspaceId,
+    domain,
+    enrichment,
+  }: {
+    workspaceId: string;
+    domain: string;
+    enrichment: WorkspaceCompanyEnrichment;
+  }): Promise<void> {
+    try {
+      await this.keyValuePairService.set({
+        userId: null,
+        workspaceId,
+        key: COMPANY_ENRICHMENT_KEY,
+        value: enrichment,
+        type: KeyValuePairType.CONFIG_VARIABLE,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to store company enrichment for workspace ${workspaceId} (${domain}): ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

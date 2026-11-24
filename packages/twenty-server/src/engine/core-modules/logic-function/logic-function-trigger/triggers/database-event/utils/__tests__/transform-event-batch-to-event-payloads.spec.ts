@@ -1,9 +1,32 @@
+import { FieldMetadataType } from 'twenty-shared/types';
+
 import type { ObjectRecordEvent } from 'twenty-shared/database-events';
 
+import { MAX_EVENTS_PER_TRIGGER_JOB } from 'src/engine/core-modules/logic-function/logic-function-trigger/triggers/database-event/constants/max-events-per-trigger-job.constant';
 import { transformEventBatchToEventPayloads } from 'src/engine/core-modules/logic-function/logic-function-trigger/triggers/database-event/utils/transform-event-batch-to-event-payloads';
 import { getFlatObjectMetadataMock } from 'src/engine/metadata-modules/flat-object-metadata/__mocks__/get-flat-object-metadata.mock';
 import { type LogicFunctionEntity } from 'src/engine/metadata-modules/logic-function/logic-function.entity';
 import type { WorkspaceEventBatch } from 'src/engine/workspace-event-emitter/types/workspace-event-batch.type';
+import { filterEventsMatchingDatabaseEventTrigger } from 'src/engine/workspace-event-emitter/utils/filter-events-matching-database-event-trigger.util';
+
+const CONDITION_FIELDS = [
+  {
+    name: 'employees',
+    type: FieldMetadataType.NUMBER,
+    universalIdentifier: 'company-employees',
+  },
+];
+
+const filterMatchingEvents = (
+  args: Omit<
+    Parameters<typeof filterEventsMatchingDatabaseEventTrigger>[0],
+    'fields'
+  >,
+) =>
+  filterEventsMatchingDatabaseEventTrigger({
+    ...args,
+    fields: CONDITION_FIELDS,
+  });
 
 const createMockLogicFunction = (
   overrides: Partial<LogicFunctionEntity> = {},
@@ -42,12 +65,48 @@ const createMockWorkspaceEventBatch = (
 });
 
 describe('transformEventBatchToEventPayloads', () => {
+  describe('triggering person', () => {
+    it('should name the person whose mutation raised the event', async () => {
+      const workspaceEventBatch = createMockWorkspaceEventBatch({
+        events: [
+          createMockEvent({
+            userId: 'user-1',
+            userWorkspaceId: 'user-workspace-1',
+          }),
+        ],
+      });
+
+      const [jobData] = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch,
+        logicFunctions: [createMockLogicFunction()],
+      });
+
+      expect(jobData).toMatchObject({
+        userId: 'user-1',
+        userWorkspaceId: 'user-workspace-1',
+      });
+    });
+
+    it('should name nobody for a mutation with no user behind it', async () => {
+      const [jobData] = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch: createMockWorkspaceEventBatch(),
+        logicFunctions: [createMockLogicFunction()],
+      });
+
+      expect(jobData).not.toHaveProperty('userId');
+      expect(jobData).not.toHaveProperty('userWorkspaceId');
+    });
+  });
+
   describe('basic transformation', () => {
-    it('should transform a single event batch with a single logic function', () => {
+    it('should transform a single event batch with a single logic function', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch();
       const logicFunctions = [createMockLogicFunction()];
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions,
       });
@@ -64,7 +123,7 @@ describe('transformEventBatchToEventPayloads', () => {
       });
     });
 
-    it('should create multiple payloads for multiple events in a batch', () => {
+    it('should create multiple payloads for multiple events in a batch', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch({
         events: [
           createMockEvent({ recordId: 'record-1' }),
@@ -74,7 +133,8 @@ describe('transformEventBatchToEventPayloads', () => {
       });
       const logicFunctions = [createMockLogicFunction()];
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions,
       });
@@ -85,7 +145,7 @@ describe('transformEventBatchToEventPayloads', () => {
       ).toEqual(['record-1', 'record-2', 'record-3']);
     });
 
-    it('should create payloads for each logic function', () => {
+    it('should create payloads for each logic function', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch();
       const logicFunctions = [
         createMockLogicFunction({
@@ -96,7 +156,8 @@ describe('transformEventBatchToEventPayloads', () => {
         }),
       ];
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions,
       });
@@ -110,7 +171,7 @@ describe('transformEventBatchToEventPayloads', () => {
   });
 
   describe('updatedFields filtering', () => {
-    it('should include all events when updatedFields is undefined', () => {
+    it('should include all events when updatedFields is undefined', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch({
         name: 'company.updated',
         events: [
@@ -130,7 +191,8 @@ describe('transformEventBatchToEventPayloads', () => {
         }),
       ];
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions,
       });
@@ -138,7 +200,7 @@ describe('transformEventBatchToEventPayloads', () => {
       expect(result).toHaveLength(2);
     });
 
-    it('should include all events when updatedFields is empty array', () => {
+    it('should include all events when updatedFields is empty array', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch({
         name: 'company.updated',
         events: [
@@ -161,7 +223,8 @@ describe('transformEventBatchToEventPayloads', () => {
         }),
       ];
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions,
       });
@@ -169,7 +232,7 @@ describe('transformEventBatchToEventPayloads', () => {
       expect(result).toHaveLength(2);
     });
 
-    it('should filter events to only those matching updatedFields', () => {
+    it('should filter events to only those matching updatedFields', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch({
         name: 'company.updated',
         events: [
@@ -196,7 +259,8 @@ describe('transformEventBatchToEventPayloads', () => {
         }),
       ];
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions,
       });
@@ -207,7 +271,7 @@ describe('transformEventBatchToEventPayloads', () => {
       ).toEqual(['record-1', 'record-3']);
     });
 
-    it('should filter events matching any of the specified updatedFields', () => {
+    it('should filter events matching any of the specified updatedFields', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch({
         name: 'company.updated',
         events: [
@@ -234,7 +298,8 @@ describe('transformEventBatchToEventPayloads', () => {
         }),
       ];
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions,
       });
@@ -245,7 +310,7 @@ describe('transformEventBatchToEventPayloads', () => {
       ).toEqual(['record-1', 'record-2']);
     });
 
-    it('should return no events when none match the updatedFields filter', () => {
+    it('should return no events when none match the updatedFields filter', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch({
         name: 'company.updated',
         events: [
@@ -268,7 +333,8 @@ describe('transformEventBatchToEventPayloads', () => {
         }),
       ];
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions,
       });
@@ -276,7 +342,7 @@ describe('transformEventBatchToEventPayloads', () => {
       expect(result).toHaveLength(0);
     });
 
-    it('should handle different updatedFields filters per logic function', () => {
+    it('should handle different updatedFields filters per logic function', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch({
         name: 'company.updated',
         events: [
@@ -307,7 +373,8 @@ describe('transformEventBatchToEventPayloads', () => {
         }),
       ];
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions,
       });
@@ -334,7 +401,7 @@ describe('transformEventBatchToEventPayloads', () => {
   });
 
   describe('position-only updates', () => {
-    it('should include position-only events when the trigger has no updatedFields filter', () => {
+    it('should include position-only events when the trigger has no updatedFields filter', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch({
         name: 'company.updated',
         events: [
@@ -354,7 +421,8 @@ describe('transformEventBatchToEventPayloads', () => {
         }),
       ];
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions,
       });
@@ -365,7 +433,7 @@ describe('transformEventBatchToEventPayloads', () => {
       ).toEqual(['record-1', 'record-2']);
     });
 
-    it('should include events that change other fields alongside position', () => {
+    it('should include events that change other fields alongside position', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch({
         name: 'company.updated',
         events: [
@@ -381,7 +449,8 @@ describe('transformEventBatchToEventPayloads', () => {
         }),
       ];
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions,
       });
@@ -389,7 +458,7 @@ describe('transformEventBatchToEventPayloads', () => {
       expect(result).toHaveLength(1);
     });
 
-    it('should exclude position-only events when the trigger filters on another field', () => {
+    it('should exclude position-only events when the trigger filters on another field', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch({
         name: 'company.updated',
         events: [
@@ -412,7 +481,8 @@ describe('transformEventBatchToEventPayloads', () => {
         }),
       ];
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions,
       });
@@ -424,11 +494,353 @@ describe('transformEventBatchToEventPayloads', () => {
     });
   });
 
+  describe('batchMode', () => {
+    const createEvents = (
+      count: number,
+      overrides: Partial<ObjectRecordEvent> = {},
+    ) =>
+      Array.from({ length: count }, (_, index) =>
+        createMockEvent({ recordId: `record-${index + 1}`, ...overrides }),
+      );
+
+    const getBatchedEvents = (payload: unknown) =>
+      (payload as { events: ObjectRecordEvent[] }).events;
+
+    it('should keep one job per event when batchMode is not set', async () => {
+      const workspaceEventBatch = createMockWorkspaceEventBatch({
+        events: createEvents(3),
+      });
+
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch,
+        logicFunctions: [createMockLogicFunction()],
+      });
+
+      expect(result).toHaveLength(3);
+      expect(result[0]).toEqual({
+        logicFunctionId: 'function-1',
+        workspaceId: 'workspace-1',
+        payload: {
+          name: 'company.updated',
+          workspaceId: 'workspace-1',
+          objectMetadata: workspaceEventBatch.objectMetadata,
+          recordId: 'record-1',
+          properties: { after: {} },
+        },
+      });
+      result.forEach((jobData) => {
+        expect(jobData.payload).not.toHaveProperty('events');
+      });
+    });
+
+    it('should keep one job per event when batchMode is false', async () => {
+      const workspaceEventBatch = createMockWorkspaceEventBatch({
+        events: createEvents(3),
+      });
+
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch,
+        logicFunctions: [
+          createMockLogicFunction({
+            databaseEventTriggerSettings: {
+              eventName: 'company.updated',
+              batchMode: false,
+            },
+          }),
+        ],
+      });
+
+      expect(result).toHaveLength(3);
+      result.forEach((jobData) => {
+        expect(jobData.payload).not.toHaveProperty('events');
+      });
+    });
+
+    it('should emit a single job when every event fits one chunk', async () => {
+      const workspaceEventBatch = createMockWorkspaceEventBatch({
+        events: createEvents(6),
+      });
+
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch,
+        logicFunctions: [
+          createMockLogicFunction({
+            databaseEventTriggerSettings: {
+              eventName: 'company.updated',
+              batchMode: true,
+            },
+          }),
+        ],
+      });
+
+      expect(result).toHaveLength(1);
+      expect(
+        getBatchedEvents(result[0].payload).map((event) => event.recordId),
+      ).toEqual([
+        'record-1',
+        'record-2',
+        'record-3',
+        'record-4',
+        'record-5',
+        'record-6',
+      ]);
+      expect(result[0].payload).toMatchObject({
+        name: 'company.updated',
+        workspaceId: 'workspace-1',
+      });
+    });
+
+    it('should split into chunks of at most the ceiling, with a smaller remainder', async () => {
+      const workspaceEventBatch = createMockWorkspaceEventBatch({
+        events: createEvents(MAX_EVENTS_PER_TRIGGER_JOB * 2 + 1),
+      });
+
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch,
+        logicFunctions: [
+          createMockLogicFunction({
+            databaseEventTriggerSettings: {
+              eventName: 'company.updated',
+              batchMode: true,
+            },
+          }),
+        ],
+      });
+
+      expect(result).toHaveLength(3);
+      expect(
+        result.map((jobData) => getBatchedEvents(jobData.payload).length),
+      ).toEqual([MAX_EVENTS_PER_TRIGGER_JOB, MAX_EVENTS_PER_TRIGGER_JOB, 1]);
+    });
+
+    it('should preserve event order across chunks', async () => {
+      const workspaceEventBatch = createMockWorkspaceEventBatch({
+        events: createEvents(MAX_EVENTS_PER_TRIGGER_JOB + 2),
+      });
+
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch,
+        logicFunctions: [
+          createMockLogicFunction({
+            databaseEventTriggerSettings: {
+              eventName: 'company.updated',
+              batchMode: true,
+            },
+          }),
+        ],
+      });
+
+      expect(
+        result.flatMap((jobData) =>
+          getBatchedEvents(jobData.payload).map((event) => event.recordId),
+        ),
+      ).toEqual(
+        Array.from(
+          { length: MAX_EVENTS_PER_TRIGGER_JOB + 2 },
+          (_, index) => `record-${index + 1}`,
+        ),
+      );
+    });
+
+    it('should never mix events triggered by different users in the same job', async () => {
+      const workspaceEventBatch = createMockWorkspaceEventBatch({
+        events: [
+          createMockEvent({
+            recordId: 'record-1',
+            userId: 'user-1',
+            userWorkspaceId: 'user-workspace-1',
+          }),
+          createMockEvent({
+            recordId: 'record-2',
+            userId: 'user-2',
+            userWorkspaceId: 'user-workspace-2',
+          }),
+          createMockEvent({
+            recordId: 'record-3',
+            userId: 'user-1',
+            userWorkspaceId: 'user-workspace-1',
+          }),
+          createMockEvent({ recordId: 'record-4' }),
+        ],
+      });
+
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch,
+        logicFunctions: [
+          createMockLogicFunction({
+            databaseEventTriggerSettings: {
+              eventName: 'company.updated',
+              batchMode: true,
+            },
+          }),
+        ],
+      });
+
+      expect(result).toHaveLength(3);
+      expect(result[0]).toMatchObject({
+        userId: 'user-1',
+        userWorkspaceId: 'user-workspace-1',
+      });
+      expect(
+        getBatchedEvents(result[0].payload).map((event) => event.recordId),
+      ).toEqual(['record-1', 'record-3']);
+
+      expect(result[1]).toMatchObject({
+        userId: 'user-2',
+        userWorkspaceId: 'user-workspace-2',
+      });
+      expect(
+        getBatchedEvents(result[1].payload).map((event) => event.recordId),
+      ).toEqual(['record-2']);
+
+      expect(result[2]).not.toHaveProperty('userId');
+      expect(result[2]).not.toHaveProperty('userWorkspaceId');
+      expect(
+        getBatchedEvents(result[2].payload).map((event) => event.recordId),
+      ).toEqual(['record-4']);
+    });
+
+    it('should apply the updatedFields filter before chunking', async () => {
+      const workspaceEventBatch = createMockWorkspaceEventBatch({
+        events: [
+          createMockEvent({
+            recordId: 'record-1',
+            properties: { after: {}, updatedFields: ['name'] },
+          }),
+          createMockEvent({
+            recordId: 'record-2',
+            properties: { after: {}, updatedFields: ['address'] },
+          }),
+          createMockEvent({
+            recordId: 'record-3',
+            properties: { after: {}, updatedFields: ['name'] },
+          }),
+          createMockEvent({
+            recordId: 'record-4',
+            properties: { after: {}, updatedFields: ['address'] },
+          }),
+          createMockEvent({
+            recordId: 'record-5',
+            properties: { after: {}, updatedFields: ['name'] },
+          }),
+        ],
+      });
+
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch,
+        logicFunctions: [
+          createMockLogicFunction({
+            databaseEventTriggerSettings: {
+              eventName: 'company.updated',
+              updatedFields: ['name'],
+              batchMode: true,
+            },
+          }),
+        ],
+      });
+
+      expect(result).toHaveLength(1);
+      expect(
+        getBatchedEvents(result[0].payload).map((event) => event.recordId),
+      ).toEqual(['record-1', 'record-3', 'record-5']);
+    });
+
+    it('should batch operations other than updated', async () => {
+      const workspaceEventBatch = createMockWorkspaceEventBatch({
+        name: 'company.created',
+        events: createEvents(3),
+      });
+
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch,
+        logicFunctions: [
+          createMockLogicFunction({
+            databaseEventTriggerSettings: {
+              eventName: 'company.created',
+              batchMode: true,
+            },
+          }),
+        ],
+      });
+
+      expect(result).toHaveLength(1);
+      expect(getBatchedEvents(result[0].payload)).toHaveLength(3);
+    });
+
+    it('should batch per logic function so an unbatched one keeps one job per event', async () => {
+      const workspaceEventBatch = createMockWorkspaceEventBatch({
+        events: createEvents(4),
+      });
+
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch,
+        logicFunctions: [
+          createMockLogicFunction({ id: 'function-1' }),
+          createMockLogicFunction({
+            id: 'function-2',
+            databaseEventTriggerSettings: {
+              eventName: 'company.updated',
+              batchMode: true,
+            },
+          }),
+        ],
+      });
+
+      expect(
+        result.filter((jobData) => jobData.logicFunctionId === 'function-1'),
+      ).toHaveLength(4);
+
+      const batchedJobs = result.filter(
+        (jobData) => jobData.logicFunctionId === 'function-2',
+      );
+
+      expect(batchedJobs).toHaveLength(1);
+      expect(getBatchedEvents(batchedJobs[0].payload)).toHaveLength(4);
+    });
+
+    it('should emit no job when every event is filtered out', async () => {
+      const workspaceEventBatch = createMockWorkspaceEventBatch({
+        events: [
+          createMockEvent({
+            recordId: 'record-1',
+            properties: { after: {}, updatedFields: ['address'] },
+          }),
+        ],
+      });
+
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch,
+        logicFunctions: [
+          createMockLogicFunction({
+            databaseEventTriggerSettings: {
+              eventName: 'company.updated',
+              updatedFields: ['name'],
+              batchMode: true,
+            },
+          }),
+        ],
+      });
+
+      expect(result).toHaveLength(0);
+    });
+  });
+
   describe('edge cases', () => {
-    it('should return empty array when no logic functions provided', () => {
+    it('should return empty array when no logic functions provided', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch();
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions: [],
       });
@@ -436,18 +848,76 @@ describe('transformEventBatchToEventPayloads', () => {
       expect(result).toHaveLength(0);
     });
 
-    it('should return empty array when no events in batch', () => {
+    it('should return empty array when no events in batch', async () => {
       const workspaceEventBatch = createMockWorkspaceEventBatch({
         events: [],
       });
       const logicFunctions = [createMockLogicFunction()];
 
-      const result = transformEventBatchToEventPayloads({
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
         workspaceEventBatch,
         logicFunctions,
       });
 
       expect(result).toHaveLength(0);
+    });
+  });
+
+  describe('condition', () => {
+    it('should only send the events whose record matches the condition', async () => {
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch: createMockWorkspaceEventBatch({
+          events: [
+            createMockEvent({
+              recordId: 'large',
+              properties: { after: { employees: 500 } },
+            } as Partial<ObjectRecordEvent>),
+            createMockEvent({
+              recordId: 'small',
+              properties: { after: { employees: 5 } },
+            } as Partial<ObjectRecordEvent>),
+          ],
+        }),
+        logicFunctions: [
+          createMockLogicFunction({
+            databaseEventTriggerSettings: {
+              eventName: 'company.updated',
+              condition: 'employees >= 100',
+            },
+          }),
+        ],
+      });
+
+      expect(
+        result.map((r) => (r.payload as ObjectRecordEvent).recordId),
+      ).toEqual(['large']);
+    });
+
+    it('should report a condition that cannot be read and send nothing', async () => {
+      const onConditionError = jest.fn();
+
+      const result = await transformEventBatchToEventPayloads({
+        filterMatchingEvents,
+        workspaceEventBatch: createMockWorkspaceEventBatch(),
+        logicFunctions: [
+          createMockLogicFunction({
+            databaseEventTriggerSettings: {
+              eventName: 'company.updated',
+              condition: 'employees >',
+            },
+          }),
+        ],
+        onConditionError,
+      });
+
+      expect(result).toEqual([]);
+      expect(onConditionError).toHaveBeenCalledTimes(1);
+      expect(onConditionError).toHaveBeenCalledWith({
+        logicFunctionId: 'function-1',
+        errorMessage: expect.any(String),
+      });
     });
   });
 });

@@ -1,4 +1,4 @@
-import { Injectable, type Type } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
 import { MessageCampaignStatus } from 'twenty-shared/types';
 import {
@@ -8,23 +8,22 @@ import {
   isDefined,
   parseEmailDocument,
 } from 'twenty-shared/utils';
-import { type ObjectLiteral } from 'typeorm';
 import { v4 } from 'uuid';
 
 import {
   EmailingDomainException,
   EmailingDomainExceptionCode,
 } from 'src/engine/core-modules/emailing-domain/exceptions/emailing-domain.exception';
-import { UserRoleService } from 'src/engine/metadata-modules/user-role/user-role.service';
-import { GlobalWorkspaceOrmManager } from 'src/engine/twenty-orm/global-workspace-datasource/global-workspace-orm.manager';
+import { type WorkspaceAuthContext } from 'src/engine/core-modules/auth/types/workspace-auth-context.type';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
 import { CampaignVariableService } from 'src/modules/emailing/services/campaign-variable.service';
 import { MessageCampaignWorkspaceEntity } from 'src/modules/emailing/standard-objects/message-campaign.workspace-entity';
-import { collectCampaignVariableNames } from 'src/modules/emailing/utils/collect-campaign-variable-names.util';
-import { collectCampaignVariableNamesFromString } from 'src/modules/emailing/utils/collect-campaign-variable-names-from-string.util';
+import { collectCampaignVariableNamesOrThrow } from 'src/modules/emailing/utils/collect-campaign-variable-names-or-throw.util';
+import { collectCampaignVariableNamesFromStringOrThrow } from 'src/modules/emailing/utils/collect-campaign-variable-names-from-string-or-throw.util';
 
 export type SaveDraftCampaignArgs = {
   workspaceId: string;
-  userWorkspaceId: string;
+  authContext: WorkspaceAuthContext;
   campaignId?: string;
   name?: string;
   subject?: string;
@@ -44,24 +43,13 @@ const DEFAULT_CAMPAIGN_NAME = 'Untitled campaign';
 @Injectable()
 export class MessageCampaignDraftService {
   constructor(
-    private readonly userRoleService: UserRoleService,
-    private readonly globalWorkspaceOrmManager: GlobalWorkspaceOrmManager,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
     private readonly campaignVariableService: CampaignVariableService,
   ) {}
 
-  private getRoleScopedRepository<T extends ObjectLiteral>(
-    workspaceId: string,
-    entity: Type<T>,
-    roleId: string,
-  ) {
-    return this.globalWorkspaceOrmManager.getRepository(workspaceId, entity, {
-      unionOf: [roleId],
-    });
-  }
-
   async saveDraft({
     workspaceId,
-    userWorkspaceId,
+    authContext,
     campaignId,
     name,
     subject,
@@ -74,10 +62,10 @@ export class MessageCampaignDraftService {
     const variablesUsed = [
       ...new Set([
         ...(isDefined(stampedDocument)
-          ? collectCampaignVariableNames(stampedDocument)
+          ? collectCampaignVariableNamesOrThrow(stampedDocument)
           : []),
         ...(isDefined(subject)
-          ? collectCampaignVariableNamesFromString(subject)
+          ? collectCampaignVariableNamesFromStringOrThrow(subject)
           : []),
       ]),
     ].sort();
@@ -89,94 +77,85 @@ export class MessageCampaignDraftService {
       );
     }
 
-    const roleId = await this.userRoleService.getRoleIdForUserWorkspace({
-      workspaceId,
-      userWorkspaceId,
-    });
+    return this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+      const campaignRepository = await this.workspaceOrmManager.getRepository(
+        MessageCampaignWorkspaceEntity,
+      );
 
-    return this.globalWorkspaceOrmManager.executeInWorkspaceContext(
-      async () => {
-        const campaignRepository = await this.getRoleScopedRepository(
-          workspaceId,
-          MessageCampaignWorkspaceEntity,
-          roleId,
-        );
+      if (!isDefined(campaignId)) {
+        const createdCampaignId = v4();
+        const campaignName = name ?? DEFAULT_CAMPAIGN_NAME;
 
-        if (!isDefined(campaignId)) {
-          const createdCampaignId = v4();
-          const campaignName = name ?? DEFAULT_CAMPAIGN_NAME;
-
-          await campaignRepository.insert({
-            id: createdCampaignId,
-            name: campaignName,
-            status: MessageCampaignStatus.DRAFT,
-            ...(isDefined(subject) && { subject }),
-            ...(isDefined(stampedDocument) && {
-              bodyTemplate: JSON.stringify(stampedDocument),
-            }),
-          });
-
-          return {
-            campaignId: createdCampaignId,
-            campaignName,
-            created: true,
-            blockCount: stampedDocument?.content?.length,
-            variablesUsed,
-          };
-        }
-
-        if (!isDefined(name) && !isDefined(subject) && !isDefined(body)) {
-          throw new EmailingDomainException(
-            'Nothing to update: provide a name, subject or body',
-            EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_NOT_SENDABLE,
-          );
-        }
-
-        const campaign = await campaignRepository.findOne({
-          where: { id: campaignId },
+        await campaignRepository.insert({
+          id: createdCampaignId,
+          name: campaignName,
+          status: MessageCampaignStatus.DRAFT,
+          ...(isDefined(subject) && { subject }),
+          ...(isDefined(stampedDocument) && {
+            bodyTemplate: JSON.stringify(stampedDocument),
+          }),
         });
 
-        if (!isDefined(campaign)) {
-          throw new EmailingDomainException(
-            `Campaign ${campaignId} not found`,
-            EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_NOT_FOUND,
-          );
-        }
-
-        if (campaign.status !== MessageCampaignStatus.DRAFT) {
-          throw new EmailingDomainException(
-            `Campaign ${campaignId} is ${campaign.status}; only draft campaigns can be edited`,
-            EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_NOT_SENDABLE,
-          );
-        }
-
-        const { affected } = await campaignRepository.update(
-          { id: campaignId, status: MessageCampaignStatus.DRAFT },
-          {
-            ...(isDefined(name) && { name }),
-            ...(isDefined(subject) && { subject }),
-            ...(isDefined(stampedDocument) && {
-              bodyTemplate: JSON.stringify(stampedDocument),
-            }),
-          },
-        );
-
-        if (affected !== 1) {
-          throw new EmailingDomainException(
-            `Campaign ${campaignId} is no longer an editable draft`,
-            EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_NOT_SENDABLE,
-          );
-        }
-
         return {
-          campaignId,
-          campaignName: name ?? campaign.name,
-          created: false,
+          campaignId: createdCampaignId,
+          campaignName,
+          created: true,
           blockCount: stampedDocument?.content?.length,
           variablesUsed,
         };
-      },
-    );
+      }
+
+      if (!isDefined(name) && !isDefined(subject) && !isDefined(body)) {
+        throw new EmailingDomainException(
+          'Nothing to update: provide a name, subject or body',
+          EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_NOT_SENDABLE,
+        );
+      }
+
+      const campaign = await campaignRepository.findOne({
+        where: { id: campaignId },
+      });
+
+      if (!isDefined(campaign)) {
+        throw new EmailingDomainException(
+          `Campaign ${campaignId} not found`,
+          EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_NOT_FOUND,
+        );
+      }
+
+      if (campaign.status !== MessageCampaignStatus.DRAFT) {
+        throw new EmailingDomainException(
+          `Campaign ${campaignId} is ${campaign.status}; only draft campaigns can be edited`,
+          EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_NOT_SENDABLE,
+        );
+      }
+
+      const { affected } = await campaignRepository.update(
+        { id: campaignId, status: MessageCampaignStatus.DRAFT },
+        {
+          ...(isDefined(name) && { name }),
+          ...(isDefined(subject) && { subject }),
+          ...(isDefined(stampedDocument) && {
+            bodyTemplate: JSON.stringify(stampedDocument),
+          }),
+        },
+      );
+
+      if (affected !== 1) {
+        throw new EmailingDomainException(
+          `Campaign ${campaignId} is no longer an editable draft`,
+          EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_NOT_SENDABLE,
+        );
+      }
+
+      return {
+        campaignId,
+        campaignName: name ?? campaign.name,
+        created: false,
+        blockCount: stampedDocument?.content?.length,
+        variablesUsed,
+      };
+    }, authContext);
   }
 
   private parseAndStampDocument(body: unknown): EmailDocument {

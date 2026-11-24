@@ -1,37 +1,44 @@
-import { CombinedGraphQLErrors } from '@apollo/client/errors';
 import { useCallback, useState } from 'react';
 
+import { getToastOptionsFromError } from '@/error-handler/utils/getToastOptionsFromError';
 import { OnboardingSkipButton } from '@/onboarding/components/OnboardingSkipButton';
 import { BookCallBookingSuccessEffect } from '@/onboarding/effect-components/BookCallBookingSuccessEffect';
 import { useCompleteBookCallOnboardingStep } from '@/onboarding/hooks/useCompleteBookCallOnboardingStep';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
+import { useToast } from 'twenty-ui/components/feedback';
 
 export const BookCallOnboardingStepActions = () => {
-  const { enqueueErrorSnackBar } = useSnackBar();
+  const { enqueueToast } = useToast();
   const completeBookCallOnboardingStep = useCompleteBookCallOnboardingStep();
   const [isCompleting, setIsCompleting] = useState(false);
 
   // Kept stable so BookCallBookingSuccessEffect subscribes to the embed once
   // instead of cycling its listener on every render.
-  const completeStep = useCallback(async () => {
-    setIsCompleting(true);
+  const completeStep = useCallback(
+    async ({ hasBookedCall }: { hasBookedCall: boolean }) => {
+      setIsCompleting(true);
 
-    try {
-      await completeBookCallOnboardingStep();
-    } catch (error) {
-      setIsCompleting(false);
+      try {
+        await completeBookCallOnboardingStep({ hasBookedCall });
+      } catch (error) {
+        setIsCompleting(false);
 
-      enqueueErrorSnackBar({
-        apolloError: CombinedGraphQLErrors.is(error) ? error : undefined,
-      });
-    }
-  }, [completeBookCallOnboardingStep, enqueueErrorSnackBar]);
+        enqueueToast(getToastOptionsFromError({ error }));
+      }
+    },
+    [completeBookCallOnboardingStep, enqueueToast],
+  );
+
+  const completeStepAfterBooking = useCallback(() => {
+    void completeStep({ hasBookedCall: true });
+  }, [completeStep]);
 
   return (
     <>
-      <BookCallBookingSuccessEffect onBookingSuccessful={completeStep} />
+      <BookCallBookingSuccessEffect
+        onBookingSuccessful={completeStepAfterBooking}
+      />
       <OnboardingSkipButton
-        onClick={() => void completeStep()}
+        onClick={() => void completeStep({ hasBookedCall: false })}
         disabled={isCompleting}
       />
     </>

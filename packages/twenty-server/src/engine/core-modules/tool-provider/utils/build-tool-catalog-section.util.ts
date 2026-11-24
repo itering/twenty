@@ -19,8 +19,10 @@ const getCategoryLabel = (category: ToolCategory): string => {
       return 'Metadata Tools (schema management)';
     case ToolCategory.VIEW:
       return 'View Tools (manage views, fields, filters, and sorts)';
-    case ToolCategory.DASHBOARD:
-      return 'Dashboard Tools (create/manage dashboards)';
+    case ToolCategory.FRONT_COMPONENT:
+      return 'Frontend Components (preview and save Workspace components)';
+    case ToolCategory.PAGE_LAYOUT:
+      return 'Page Layout Tools (manage dashboards, tabs and widgets, and place components on dashboard or record pages)';
     case ToolCategory.LOGIC_FUNCTION:
       return 'Logic Functions (custom tools)';
     case ToolCategory.NAVIGATION_MENU_ITEM:
@@ -29,6 +31,10 @@ const getCategoryLabel = (category: ToolCategory): string => {
       return 'Webhook Tools (outgoing webhooks)';
     case ToolCategory.ROLE:
       return 'Role Tools (manage roles and permissions)';
+    case ToolCategory.AGENT:
+      return 'Agent Tools (create/manage AI agents and their triggers)';
+    case ToolCategory.MCP:
+      return 'MCP Server Tools (external tools, grouped by server)';
     default:
       return assertUnreachable(category);
   }

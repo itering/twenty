@@ -19,8 +19,6 @@ const mockUseFileUpload = useFileUpload as jest.Mock;
 const buildAttachment = (id: string): EmailAttachment =>
   ({ id, name: `${id}.pdf` }) as EmailAttachment;
 
-// Captures the onUpload callback the hook hands to the file picker, so a test
-// can drive an upload the way the picker would.
 const setup = (uploadEmailAttachment: jest.Mock) => {
   let triggerUpload: ((files: File[]) => Promise<void>) | undefined;
 
@@ -93,13 +91,42 @@ describe('useAttachEmailFiles', () => {
 
     const appendToPreviousFiles = onFilesAttached.mock.calls[0][0];
 
-    // The setter is called with an updater, so whatever the list holds when the
-    // upload settles is what gets appended to.
     expect(typeof appendToPreviousFiles).toBe('function');
     expect(appendToPreviousFiles([buildAttachment('kept')])).toEqual([
       buildAttachment('kept'),
       buildAttachment('new'),
     ]);
+  });
+
+  it('should drop an upload that finishes after pending uploads were discarded', async () => {
+    let resolveUpload: (attachment: EmailAttachment) => void = () => {};
+    const uploadEmailAttachment = jest.fn(
+      () =>
+        new Promise<EmailAttachment>((resolve) => {
+          resolveUpload = resolve;
+        }),
+    );
+
+    const { view, onFilesAttached, getTriggerUpload } = setup(
+      uploadEmailAttachment,
+    );
+
+    let uploadPromise: Promise<void> | undefined;
+    act(() => {
+      uploadPromise = getTriggerUpload()?.([new File([], 'late.pdf')]);
+    });
+
+    act(() => {
+      view.result.current.discardPendingUploads();
+    });
+
+    await act(async () => {
+      resolveUpload(buildAttachment('late'));
+      await uploadPromise;
+    });
+
+    expect(onFilesAttached).not.toHaveBeenCalled();
+    expect(view.result.current.isUploadingAttachments).toBe(false);
   });
 
   it('should not touch the attachments when every upload fails', async () => {

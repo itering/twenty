@@ -1,37 +1,13 @@
 import request from 'supertest';
-import { deleteConfigVariable } from 'test/integration/twenty-config/utils/delete-config-variable.util';
-import { updateConfigVariable } from 'test/integration/twenty-config/utils/update-config-variable.util';
+import { asWorkspaceRequest } from 'test/integration/graphql/suites/auth/cookie-session/utils/as-workspace-request.util';
+import { buildAppleHttpOrigin } from 'test/integration/graphql/suites/auth/cookie-session/utils/build-apple-http-origin.util';
+import { extractSessionCookie } from 'test/integration/graphql/suites/auth/cookie-session/utils/extract-session-cookie.util';
+import { signInAndGetSessionCookie } from 'test/integration/graphql/suites/auth/cookie-session/utils/sign-in-and-get-session-cookie.util';
+import { SESSION_COOKIE_OPT_IN_HEADER_NAME } from 'twenty-shared/constants';
 
 import { USER_SESSION_COOKIE_NAME } from 'src/engine/core-modules/user-session/constants/user-session-cookie-name.constant';
 
-const AUTH_COOKIE_SESSIONS_ENABLED_KEY = 'AUTH_COOKIE_SESSIONS_ENABLED';
 const SERVER_URL = `http://localhost:${APP_PORT}`;
-
-const buildAppleOrigin = (): string => {
-  const origin = new URL(SERVER_URL);
-
-  origin.hostname =
-    process.env.IS_MULTIWORKSPACE_ENABLED === 'true'
-      ? `apple.${origin.hostname}`
-      : origin.hostname;
-
-  return origin.origin;
-};
-
-// The app listens on localhost while the seeded workspace resolves from the
-// apple subdomain. Without a matching Host the server sees a cross-origin
-// request and refuses to issue the cookie, which is the behaviour under test
-// everywhere except here.
-const asWorkspaceRequest = (
-  agent: request.Test,
-  originOverride?: string,
-): request.Test => {
-  const host = new URL(origin).host;
-
-  return originOverride === undefined
-    ? agent.set('Host', host).set('Origin', origin)
-    : agent.set('Host', host).set('Origin', originOverride);
-};
 
 const CURRENT_USER_QUERY = `
   query CurrentUser {
@@ -48,9 +24,7 @@ const SIGN_OUT_MUTATION = `
   }
 `;
 
-// A workspace object rather than currentUser: workspace types only exist in the
-// schema once a workspace is bound, so a request that is allowed to continue
-// unauthenticated fails with "Cannot query field" instead of an auth error.
+// Not currentUser: workspace types only exist once a workspace is bound, so a pass-through fails with "Cannot query field".
 const FIND_COMPANIES_QUERY = `
   query FindCompanies {
     companies(first: 1) {
@@ -65,100 +39,13 @@ const FIND_COMPANIES_QUERY = `
 
 const AUTH_ERROR_CODES = ['UNAUTHENTICATED', 'FORBIDDEN'];
 
-const extractSessionCookie = (
-  setCookieHeader: string | string[] | undefined,
-): string | undefined => {
-  const setCookies =
-    typeof setCookieHeader === 'string'
-      ? [setCookieHeader]
-      : (setCookieHeader ?? []);
-
-  return setCookies
-    .find((cookie) => cookie.startsWith(`${USER_SESSION_COOKIE_NAME}=`))
-    ?.split(';')[0];
-};
-
-const origin = buildAppleOrigin();
-
-const signInAndGetSessionCookie = async (): Promise<string> => {
-  const loginResponse = await asWorkspaceRequest(
-    request(SERVER_URL).post('/metadata'),
-  )
-    .send({
-      query: `
-        mutation GetLoginTokenFromCredentials(
-          $email: String!
-          $password: String!
-          $origin: String!
-        ) {
-          getLoginTokenFromCredentials(
-            email: $email
-            password: $password
-            origin: $origin
-          ) {
-            loginToken {
-              token
-            }
-          }
-        }
-      `,
-      variables: {
-        email: 'tim@apple.dev',
-        password: 'tim@apple.dev',
-        origin,
-      },
-    })
-    .expect(200);
-
-  const loginToken =
-    loginResponse.body.data.getLoginTokenFromCredentials.loginToken.token;
-
-  const exchangeResponse = await asWorkspaceRequest(
-    request(SERVER_URL).post('/metadata'),
-  )
-    .send({
-      query: `
-        mutation GetAuthTokensFromLoginToken(
-          $loginToken: String!
-          $origin: String!
-        ) {
-          getAuthTokensFromLoginToken(loginToken: $loginToken, origin: $origin) {
-            tokens {
-              accessOrWorkspaceAgnosticToken {
-                token
-              }
-            }
-          }
-        }
-      `,
-      variables: { loginToken, origin },
-    })
-    .expect(200);
-
-  const sessionCookie = extractSessionCookie(
-    exchangeResponse.headers['set-cookie'],
-  );
-
-  expect(sessionCookie).toBeDefined();
-
-  return sessionCookie as string;
-};
+const origin = buildAppleHttpOrigin();
 
 describe('Cookie sessions (integration)', () => {
   let sessionCookie: string;
 
   beforeAll(async () => {
-    await updateConfigVariable({
-      input: { key: AUTH_COOKIE_SESSIONS_ENABLED_KEY, value: true },
-    });
-
     sessionCookie = await signInAndGetSessionCookie();
-  });
-
-  afterAll(async () => {
-    await deleteConfigVariable({
-      input: { key: AUTH_COOKIE_SESSIONS_ENABLED_KEY },
-    });
   });
 
   it('should set a session cookie when exchanging a login token', () => {
@@ -193,6 +80,7 @@ describe('Cookie sessions (integration)', () => {
     const response = await request(SERVER_URL)
       .post('/metadata')
       .set('Host', new URL(origin).host)
+      .set(SESSION_COOKIE_OPT_IN_HEADER_NAME, '1')
       .set('Cookie', sessionCookie)
       .send({ query: CURRENT_USER_QUERY });
 
@@ -200,8 +88,28 @@ describe('Cookie sessions (integration)', () => {
     expect(response.body.error).toBe('CSRF_ORIGIN_MISMATCH');
   });
 
-  // Mints its own session rather than consuming the shared one, so revoking it
-  // cannot break the tests above whatever order they run in.
+  it('should ignore the session cookie on a request that does not opt in', async () => {
+    const response = await request(SERVER_URL)
+      .post('/metadata')
+      .set('Host', new URL(origin).host)
+      .set('Origin', origin)
+      .set('Cookie', sessionCookie)
+      .send({ query: CURRENT_USER_QUERY });
+
+    const codes = response.body.errors.map(
+      (graphQLError: { extensions?: { code?: string } }) =>
+        graphQLError.extensions?.code,
+    );
+
+    expect(response.body.data?.currentUser).toBeFalsy();
+    expect(codes.some((code: string) => AUTH_ERROR_CODES.includes(code))).toBe(
+      true,
+    );
+    expect(
+      extractSessionCookie(response.headers['set-cookie']),
+    ).toBeUndefined();
+  });
+
   it('should stop authenticating the cookie once signed out', async () => {
     const disposableSessionCookie = await signInAndGetSessionCookie();
 
@@ -256,11 +164,38 @@ describe('Cookie sessions (integration)', () => {
         graphQLError.extensions?.code,
     );
 
-    // The client only signs out on an auth code. A missing workspace schema
-    // surfaces as "Cannot query field", which it cannot act on.
+    // The client only signs out on an auth code.
     expect(messages.join(' ')).not.toContain('Cannot query field');
     expect(codes.some((code: string) => AUTH_ERROR_CODES.includes(code))).toBe(
       true,
     );
+  });
+
+  it('should answer a workspace query sent without credentials with an auth error rather than a schema error', async () => {
+    const response = await asWorkspaceRequest(
+      request(SERVER_URL).post('/graphql'),
+    ).send({ query: FIND_COMPANIES_QUERY });
+
+    expect(response.body.errors).toBeDefined();
+
+    const messages = response.body.errors.map(
+      (graphQLError: { message: string }) => graphQLError.message,
+    );
+    const codes = response.body.errors.map(
+      (graphQLError: { extensions?: { code?: string } }) =>
+        graphQLError.extensions?.code,
+    );
+
+    expect(messages.join(' ')).not.toContain('Cannot query field');
+    expect(codes).toContain('UNAUTHENTICATED');
+  });
+
+  it('should keep serving introspection without credentials outside production for schema codegen', async () => {
+    const response = await asWorkspaceRequest(
+      request(SERVER_URL).post('/graphql'),
+    ).send({ query: '{ __schema { queryType { name } } }' });
+
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.__schema.queryType.name).toBe('Query');
   });
 });

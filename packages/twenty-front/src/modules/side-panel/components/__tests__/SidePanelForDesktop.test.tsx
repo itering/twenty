@@ -1,3 +1,5 @@
+import { i18n } from '@lingui/core';
+import { I18nProvider } from '@lingui/react';
 import { act, fireEvent, render } from '@testing-library/react';
 import { Provider as JotaiProvider } from 'jotai';
 import { type ReactNode } from 'react';
@@ -5,25 +7,13 @@ import { type ReactNode } from 'react';
 import { SidePanelForDesktop } from '@/side-panel/components/SidePanelForDesktop';
 import { isSidePanelClosingState } from '@/side-panel/states/isSidePanelClosingState';
 import { isSidePanelOpenedState } from '@/side-panel/states/isSidePanelOpenedState';
+import { isSidePanelShrinkingFromFullWidthState } from '@/side-panel/states/isSidePanelShrinkingFromFullWidthState';
 import {
   jotaiStore,
   resetJotaiStore,
 } from '@/ui/utilities/state/jotai/jotaiStore';
 
 const sidePanelCloseAnimationCompleteCleanupMock = jest.fn();
-
-let capturedOnContinueChatFromFullWidth: (() => void) | undefined;
-
-jest.mock('@/side-panel/components/SidePanelAskAiHandoffEffect', () => ({
-  SidePanelAskAiHandoffEffect: ({
-    onContinueChatFromFullWidth,
-  }: {
-    onContinueChatFromFullWidth: () => void;
-  }) => {
-    capturedOnContinueChatFromFullWidth = onContinueChatFromFullWidth;
-    return null;
-  },
-}));
 
 jest.mock('framer-motion', () => ({
   useReducedMotion: () => false,
@@ -37,8 +27,9 @@ jest.mock('@/side-panel/components/SidePanelWidthEffect', () => ({
   SidePanelWidthEffect: () => null,
 }));
 
-jest.mock('@/ui/layout/resizable-panel/components/ResizablePanelGap', () => ({
-  ResizablePanelGap: () => null,
+jest.mock('twenty-ui/primitives/layout', () => ({
+  ...jest.requireActual('twenty-ui/primitives/layout'),
+  ResizeHandle: () => null,
 }));
 
 jest.mock(
@@ -56,12 +47,14 @@ jest.mock('@/side-panel/hooks/useSidePanelMenu', () => ({
 }));
 
 const Wrapper = ({ children }: { children: ReactNode }) => (
-  <JotaiProvider store={jotaiStore}>{children}</JotaiProvider>
+  <I18nProvider i18n={i18n}>
+    <JotaiProvider store={jotaiStore}>{children}</JotaiProvider>
+  </I18nProvider>
 );
 
 const startHandoffShrink = () => {
   act(() => {
-    capturedOnContinueChatFromFullWidth?.();
+    jotaiStore.set(isSidePanelShrinkingFromFullWidthState.atom, true);
   });
 };
 
@@ -69,7 +62,6 @@ describe('SidePanelForDesktop', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetJotaiStore();
-    capturedOnContinueChatFromFullWidth = undefined;
     sidePanelCloseAnimationCompleteCleanupMock.mockImplementation(() => {
       jotaiStore.set(isSidePanelClosingState.atom, false);
     });

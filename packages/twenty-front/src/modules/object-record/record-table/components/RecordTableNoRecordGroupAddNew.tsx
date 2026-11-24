@@ -5,25 +5,32 @@ import { useRecordTableContextOrThrow } from '@/object-record/record-table/conte
 import { useCreateNewIndexRecord } from '@/object-record/record-table/hooks/useCreateNewIndexRecord';
 import { isRecordTableCellsNonEditableComponentState } from '@/object-record/record-table/states/isRecordTableCellsNonEditableComponentState';
 import { RecordTableActionRow } from '@/object-record/record-table/record-table-row/components/RecordTableActionRow';
+import { RecordTableWidgetJunctionAddNewRow } from '@/object-record/record-table-widget/components/RecordTableWidgetJunctionAddNewRow';
 import { RecordTableWidgetNestedRelationAddNewRow } from '@/object-record/record-table-widget/components/RecordTableWidgetNestedRelationAddNewRow';
 import { RecordTableWidgetContext } from '@/object-record/record-table-widget/contexts/RecordTableWidgetContext';
 import { canCreateRecordsForObjectMetadataItem } from '@/object-record/utils/canCreateRecordsForObjectMetadataItem';
-import { useLoadRecordsToVirtualRows } from '@/object-record/record-table/virtualization/hooks/useLoadRecordsToVirtualRows';
-import { totalNumberOfRecordsToVirtualizeComponentState } from '@/object-record/record-table/virtualization/states/totalNumberOfRecordsToVirtualizeComponentState';
+import { useLoadRecordsAtRowIndexes } from '@/object-record/record-table/virtualization/hooks/useLoadRecordsAtRowIndexes';
+import { totalNumberOfRowsComponentState } from '@/object-record/record-table/virtualization/states/totalNumberOfRowsComponentState';
+import { recordTableRowIndexByRecordIdComponentSelector } from '@/object-record/record-table/states/selectors/recordTableRowIndexByRecordIdComponentSelector';
+import { useAtomComponentSelectorCallbackState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorCallbackState';
+import { useAtomComponentStateCallbackState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateCallbackState';
+import { useStore } from 'jotai';
 import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
 import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
-import { t } from '@lingui/core/macro';
 import { useCallback, useContext } from 'react';
 import { type ObjectRecord } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 import { IconPlus } from 'twenty-ui/icon';
+import { useLingui } from '@lingui/react/macro';
 
 export const RecordTableNoRecordGroupAddNew = () => {
+  const { t } = useLingui();
   const { objectMetadataItem, recordTableId } = useRecordTableContextOrThrow();
 
-  const nestedRelationCreateThrough = useContext(
-    RecordTableWidgetContext,
-  )?.nestedRelationCreateThrough;
+  const recordTableWidgetContext = useContext(RecordTableWidgetContext);
+  const nestedRelationCreateThrough =
+    recordTableWidgetContext?.nestedRelationCreateThrough;
+  const junctionCreateThrough = recordTableWidgetContext?.junctionCreateThrough;
 
   const isRecordTableCellsNonEditable = useAtomComponentStateValue(
     isRecordTableCellsNonEditableComponentState,
@@ -41,11 +48,17 @@ export const RecordTableNoRecordGroupAddNew = () => {
     hasAnySoftDeleteFilterOnViewComponentSelector,
   );
 
-  const totalNumberOfRecordsToVirtualize = useAtomComponentStateValue(
-    totalNumberOfRecordsToVirtualizeComponentState,
+  const store = useStore();
+
+  const totalNumberOfRowsCallbackState = useAtomComponentStateCallbackState(
+    totalNumberOfRowsComponentState,
   );
 
-  const { loadRecordsToVirtualRows } = useLoadRecordsToVirtualRows();
+  const rowIndexByRecordIdCallbackState = useAtomComponentSelectorCallbackState(
+    recordTableRowIndexByRecordIdComponentSelector,
+  );
+
+  const { loadRecordsAtRowIndexes } = useLoadRecordsAtRowIndexes();
   const { upsertRecordsInStore } = useUpsertRecordsInStore();
 
   const handleCreateRecord = useCallback(
@@ -55,20 +68,32 @@ export const RecordTableNoRecordGroupAddNew = () => {
         ...recordInput,
       });
 
+      if (!isDefined(createdRecord)) {
+        return;
+      }
+
       upsertRecordsInStore({ partialRecords: [createdRecord] });
 
-      if (isDefined(totalNumberOfRecordsToVirtualize)) {
-        loadRecordsToVirtualRows({
+      const isAlreadyPlaced = store
+        .get(rowIndexByRecordIdCallbackState)
+        .has(createdRecord.id);
+
+      const totalNumberOfRows = store.get(totalNumberOfRowsCallbackState);
+
+      if (!isAlreadyPlaced && isDefined(totalNumberOfRows)) {
+        loadRecordsAtRowIndexes({
           records: [createdRecord],
-          startingRealIndex: totalNumberOfRecordsToVirtualize,
+          startingRowIndex: totalNumberOfRows,
         });
       }
     },
     [
       createNewIndexRecord,
       upsertRecordsInStore,
-      loadRecordsToVirtualRows,
-      totalNumberOfRecordsToVirtualize,
+      loadRecordsAtRowIndexes,
+      rowIndexByRecordIdCallbackState,
+      store,
+      totalNumberOfRowsCallbackState,
     ],
   );
 
@@ -78,6 +103,16 @@ export const RecordTableNoRecordGroupAddNew = () => {
 
   if (hasAnySoftDeleteFilterOnView) {
     return null;
+  }
+
+  // Linking through a junction never creates a record of the table's object, so its creatability does not apply.
+  if (isDefined(junctionCreateThrough)) {
+    return (
+      <RecordTableWidgetJunctionAddNewRow
+        dropdownId={`${recordTableId}-junction-add-new`}
+        junctionCreateThrough={junctionCreateThrough}
+      />
+    );
   }
 
   if (

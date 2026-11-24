@@ -1,42 +1,54 @@
 import { CommandMenuItem } from '@/command-menu/components/CommandMenuItem';
 import { FIND_MANY_FRONT_COMPONENTS } from '@/front-components/graphql/queries/findManyFrontComponents';
 import { useReadableObjectMetadataItems } from '@/object-metadata/hooks/useReadableObjectMetadataItems';
-import { useCreatePageLayoutFrontComponentWidget } from '@/page-layout/hooks/useCreatePageLayoutFrontComponentWidget';
 import { useCreatePageLayoutGraphWidget } from '@/page-layout/hooks/useCreatePageLayoutGraphWidget';
-import { useCreatePageLayoutIframeWidget } from '@/page-layout/hooks/useCreatePageLayoutIframeWidget';
-import { useCreatePageLayoutRecordTableWidget } from '@/page-layout/hooks/useCreatePageLayoutRecordTableWidget';
-import { useCreatePageLayoutStandaloneRichTextWidget } from '@/page-layout/hooks/useCreatePageLayoutStandaloneRichTextWidget';
+import { useCreatePageLayoutWidget } from '@/page-layout/hooks/useCreatePageLayoutWidget';
 import { useOpportunityDefaultChartConfig } from '@/page-layout/hooks/useOpportunityDefaultChartConfig';
 import { useRemovePageLayoutWidgetAndPreservePosition } from '@/page-layout/hooks/useRemovePageLayoutWidgetAndPreservePosition';
 import { pageLayoutDraftComponentState } from '@/page-layout/states/pageLayoutDraftComponentState';
 import { pageLayoutEditingWidgetIdComponentState } from '@/page-layout/states/pageLayoutEditingWidgetIdComponentState';
 import { getTabListInstanceIdFromPageLayoutAndRecord } from '@/page-layout/utils/getTabListInstanceIdFromPageLayoutAndRecord';
 import { useAddDraftViewForRecordTableWidget } from '@/page-layout/widgets/record-table/hooks/useAddDraftViewForRecordTableWidget';
+import {
+  RECORD_TABLE_WIDGET_LAYOUT_OPTIONS,
+  RECORD_TABLE_WIDGET_LAYOUT_VIEW_TYPES,
+} from '@/page-layout/widgets/record-table/types/RecordTableWidgetLayoutViewType';
+import { isRecordTableWidgetLayoutAvailable } from '@/page-layout/widgets/record-table/utils/isRecordTableWidgetLayoutAvailable';
 import { SidePanelGroup } from '@/side-panel/components/SidePanelGroup';
 import { SidePanelList } from '@/side-panel/components/SidePanelList';
 import { useSidePanelMenu } from '@/side-panel/hooks/useSidePanelMenu';
 import { useNavigatePageLayoutSidePanel } from '@/side-panel/pages/page-layout/hooks/useNavigatePageLayoutSidePanel';
-import { usePageLayoutIdFromContextStore } from '@/side-panel/pages/page-layout/hooks/usePageLayoutIdFromContextStore';
+import { GRAPH_TYPE_INFORMATION } from '@/side-panel/pages/page-layout/constants/GraphTypeInformation';
+import { GRAPH_TYPE_OPTIONS } from '@/side-panel/pages/page-layout/constants/GraphTypeOptions';
+import { usePageLayoutSidePanelTarget } from '@/side-panel/pages/page-layout/hooks/usePageLayoutSidePanelTarget';
+import { type GraphType } from '@/side-panel/pages/page-layout/types/GraphType';
 import { getFrontComponentWidgetTypeSelectItemId } from '@/side-panel/pages/page-layout/utils/getFrontComponentWidgetTypeSelectItemId';
 import { isExistingWidgetMissingOrDifferentType } from '@/side-panel/pages/page-layout/utils/isExistingWidgetMissingOrDifferentType';
 import { SelectableListItem } from '@/ui/layout/selectable-list/components/SelectableListItem';
 import { useAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentState';
 import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 import { useQuery } from '@apollo/client/react';
-import { t } from '@lingui/core/macro';
-import { CoreObjectNameSingular, SidePanelPages } from 'twenty-shared/types';
-import { isDefined } from 'twenty-shared/utils';
 import {
-  IconAlignBoxLeftTop,
-  IconApps,
-  IconChartPie,
-  IconFrame,
-  IconTable,
-} from 'twenty-ui/icon';
-import { type FrontComponent, WidgetType } from '~/generated-metadata/graphql';
+  StandardObjectNameSingular,
+  SidePanelPages,
+} from 'twenty-shared/types';
+import {
+  isDefined,
+  isFrontComponentAvailableInWidgetPicker,
+} from 'twenty-shared/utils';
+import { IconAlignBoxLeftTop, IconApps, IconFrame } from 'twenty-ui/icon';
+import {
+  type FrontComponent,
+  PageLayoutType,
+  WidgetConfigurationType,
+  WidgetType,
+} from '~/generated-metadata/graphql';
+import { useLingui } from '@lingui/react/macro';
 
 export const SidePanelPageLayoutDashboardWidgetTypeSelect = () => {
-  const { pageLayoutId, recordId } = usePageLayoutIdFromContextStore();
+  const { t } = useLingui();
+  const { pageLayoutId, targetRecordIdentifier } =
+    usePageLayoutSidePanelTarget();
 
   const { closeSidePanelMenu } = useSidePanelMenu();
 
@@ -52,7 +64,7 @@ export const SidePanelPageLayoutDashboardWidgetTypeSelect = () => {
   const tabListInstanceId = getTabListInstanceIdFromPageLayoutAndRecord({
     pageLayoutId,
     layoutType: pageLayoutDraft.type,
-    targetRecordIdentifier: { id: recordId, targetObjectNameSingular: '' },
+    targetRecordIdentifier,
   });
 
   const { createPageLayoutGraphWidget } = useCreatePageLayoutGraphWidget({
@@ -60,25 +72,10 @@ export const SidePanelPageLayoutDashboardWidgetTypeSelect = () => {
     tabListInstanceId,
   });
 
-  const { createPageLayoutIframeWidget } = useCreatePageLayoutIframeWidget({
+  const { createPageLayoutWidget } = useCreatePageLayoutWidget({
     pageLayoutId,
     tabListInstanceId,
   });
-
-  const { createPageLayoutStandaloneRichTextWidget } =
-    useCreatePageLayoutStandaloneRichTextWidget({
-      pageLayoutId,
-      tabListInstanceId,
-    });
-
-  const { createPageLayoutFrontComponentWidget } =
-    useCreatePageLayoutFrontComponentWidget({
-      pageLayoutId,
-      tabListInstanceId,
-    });
-
-  const { createPageLayoutRecordTableWidget } =
-    useCreatePageLayoutRecordTableWidget(pageLayoutId);
 
   const { removePageLayoutWidgetAndPreservePosition } =
     useRemovePageLayoutWidgetAndPreservePosition(pageLayoutId);
@@ -87,21 +84,52 @@ export const SidePanelPageLayoutDashboardWidgetTypeSelect = () => {
     useAddDraftViewForRecordTableWidget(pageLayoutId);
   const { readableObjectMetadataItems } = useReadableObjectMetadataItems();
 
-  const firstAvailableObjectMetadataItem =
-    readableObjectMetadataItems.find(
-      (objectMetadataItem) =>
-        objectMetadataItem.nameSingular === CoreObjectNameSingular.Company,
-    ) ||
-    [...readableObjectMetadataItems].sort((first, second) =>
-      first.labelPlural.localeCompare(second.labelPlural),
-    )[0];
+  const candidateObjectMetadataItems = [
+    ...[
+      StandardObjectNameSingular.Company,
+      StandardObjectNameSingular.Opportunity,
+    ]
+      .map((nameSingular) =>
+        readableObjectMetadataItems.find(
+          (objectMetadataItem) =>
+            objectMetadataItem.nameSingular === nameSingular,
+        ),
+      )
+      .filter(isDefined),
+    ...readableObjectMetadataItems
+      .filter((objectMetadataItem) => !objectMetadataItem.isSystem)
+      .toSorted((first, second) =>
+        first.labelPlural.localeCompare(second.labelPlural),
+      ),
+  ];
+
+  // Each layout defaults to the first object that supports it, so Company lacking a select field does not hide kanban.
+  const viewLayoutItems = RECORD_TABLE_WIDGET_LAYOUT_VIEW_TYPES.flatMap(
+    (viewType) => {
+      const objectMetadataItem = candidateObjectMetadataItems.find(
+        (candidateObjectMetadataItem) =>
+          isRecordTableWidgetLayoutAvailable({
+            viewType,
+            objectMetadataItem: candidateObjectMetadataItem,
+          }),
+      );
+
+      return isDefined(objectMetadataItem)
+        ? [{ viewType, objectMetadataItem }]
+        : [];
+    },
+  );
 
   const { data: frontComponentsData } = useQuery<{
     frontComponents: FrontComponent[];
   }>(FIND_MANY_FRONT_COMPONENTS);
 
   const frontComponents = (frontComponentsData?.frontComponents ?? []).filter(
-    (frontComponent) => !frontComponent.isHeadless,
+    (frontComponent) =>
+      isFrontComponentAvailableInWidgetPicker({
+        frontComponent,
+        pageLayoutType: PageLayoutType.DASHBOARD,
+      }),
   );
 
   const frontComponentsWithSelectItemId = frontComponents.map(
@@ -123,21 +151,17 @@ export const SidePanelPageLayoutDashboardWidgetTypeSelect = () => {
         .find((widget) => widget.id === pageLayoutEditingWidgetId)
     : undefined;
 
-  const handleNavigateToGraphTypeSelect = () => {
-    if (
-      isExistingWidgetMissingOrDifferentType(
-        existingWidget?.type,
-        WidgetType.GRAPH,
-      )
-    ) {
-      if (isDefined(pageLayoutEditingWidgetId)) {
-        removePageLayoutWidgetAndPreservePosition(pageLayoutEditingWidgetId);
-      }
-
-      const fieldSelection = buildBarChartFieldSelection();
-      const newWidget = createPageLayoutGraphWidget({ fieldSelection });
-      setPageLayoutEditingWidgetId(newWidget.id);
+  const handleCreateChartWidget = (graphType: GraphType) => {
+    if (isDefined(pageLayoutEditingWidgetId)) {
+      removePageLayoutWidgetAndPreservePosition(pageLayoutEditingWidgetId);
     }
+
+    const fieldSelection = buildBarChartFieldSelection();
+    const newWidget = createPageLayoutGraphWidget({
+      fieldSelection,
+      graphType,
+    });
+    setPageLayoutEditingWidgetId(newWidget.id);
 
     navigatePageLayoutSidePanel({
       sidePanelPage: SidePanelPages.DashboardChartSettings,
@@ -156,7 +180,14 @@ export const SidePanelPageLayoutDashboardWidgetTypeSelect = () => {
         removePageLayoutWidgetAndPreservePosition(pageLayoutEditingWidgetId);
       }
 
-      const newWidget = createPageLayoutIframeWidget(t`Untitled iFrame`, null);
+      const newWidget = createPageLayoutWidget({
+        type: WidgetType.IFRAME,
+        title: t`Untitled iFrame`,
+        configuration: {
+          configurationType: WidgetConfigurationType.IFRAME,
+          url: null,
+        },
+      });
       setPageLayoutEditingWidgetId(newWidget.id);
     }
 
@@ -177,9 +208,13 @@ export const SidePanelPageLayoutDashboardWidgetTypeSelect = () => {
         removePageLayoutWidgetAndPreservePosition(pageLayoutEditingWidgetId);
       }
 
-      const newWidget = createPageLayoutStandaloneRichTextWidget({
-        blocknote: '',
-        markdown: null,
+      const newWidget = createPageLayoutWidget({
+        type: WidgetType.STANDALONE_RICH_TEXT,
+        title: t`Untitled Rich Text`,
+        configuration: {
+          configurationType: WidgetConfigurationType.STANDALONE_RICH_TEXT,
+          body: { tiptap: '', markdown: null },
+        },
       });
       setPageLayoutEditingWidgetId(newWidget.id);
     }
@@ -187,28 +222,31 @@ export const SidePanelPageLayoutDashboardWidgetTypeSelect = () => {
     closeSidePanelMenu();
   };
 
-  const handleNavigateToRecordTableSettings = () => {
-    if (
-      isExistingWidgetMissingOrDifferentType(
-        existingWidget?.type,
-        WidgetType.RECORD_TABLE,
-      )
-    ) {
-      if (isDefined(pageLayoutEditingWidgetId)) {
-        removePageLayoutWidgetAndPreservePosition(pageLayoutEditingWidgetId);
-      }
-
-      const newRecordTableWidget = createPageLayoutRecordTableWidget(
-        firstAvailableObjectMetadataItem,
-      );
-
-      setPageLayoutEditingWidgetId(newRecordTableWidget.id);
-
-      addDraftViewForRecordTableWidget(
-        newRecordTableWidget.id,
-        firstAvailableObjectMetadataItem,
-      );
+  const handleCreateViewWidget = ({
+    viewType,
+    objectMetadataItem,
+  }: (typeof viewLayoutItems)[number]) => {
+    if (isDefined(pageLayoutEditingWidgetId)) {
+      removePageLayoutWidgetAndPreservePosition(pageLayoutEditingWidgetId);
     }
+
+    const newRecordTableWidget = createPageLayoutWidget({
+      type: WidgetType.RECORD_TABLE,
+      title: objectMetadataItem.labelPlural,
+      configuration: {
+        configurationType: WidgetConfigurationType.RECORD_TABLE,
+        isUIEditable: pageLayoutDraft.type === PageLayoutType.RECORD_PAGE,
+      },
+      objectMetadataId: objectMetadataItem.id,
+    });
+
+    setPageLayoutEditingWidgetId(newRecordTableWidget.id);
+
+    addDraftViewForRecordTableWidget({
+      widgetId: newRecordTableWidget.id,
+      objectMetadataItem,
+      targetViewType: viewType,
+    });
 
     navigatePageLayoutSidePanel({
       sidePanelPage: SidePanelPages.DashboardRecordTableSettings,
@@ -227,10 +265,15 @@ export const SidePanelPageLayoutDashboardWidgetTypeSelect = () => {
         removePageLayoutWidgetAndPreservePosition(pageLayoutEditingWidgetId);
       }
 
-      const newWidget = createPageLayoutFrontComponentWidget(
-        frontComponent.name,
-        frontComponent.id,
-      );
+      const newWidget = createPageLayoutWidget({
+        type: WidgetType.FRONT_COMPONENT,
+        title: frontComponent.name,
+        configuration: {
+          __typename: 'FrontComponentConfiguration',
+          configurationType: WidgetConfigurationType.FRONT_COMPONENT,
+          frontComponentId: frontComponent.id,
+        },
+      });
       setPageLayoutEditingWidgetId(newWidget.id);
     }
 
@@ -238,8 +281,8 @@ export const SidePanelPageLayoutDashboardWidgetTypeSelect = () => {
   };
 
   const selectableItemIds = [
-    'chart',
-    'record-table',
+    ...GRAPH_TYPE_OPTIONS,
+    ...viewLayoutItems.map(({ viewType }) => viewType),
     'iframe',
     'rich-text',
     ...frontComponentsWithSelectItemId.map(({ selectItemId }) => selectItemId),
@@ -247,29 +290,49 @@ export const SidePanelPageLayoutDashboardWidgetTypeSelect = () => {
 
   return (
     <SidePanelList selectableItemIds={selectableItemIds}>
-      <SidePanelGroup heading={t`Widget type`}>
-        <SelectableListItem
-          itemId="chart"
-          onEnter={handleNavigateToGraphTypeSelect}
-        >
-          <CommandMenuItem
-            Icon={IconChartPie}
-            label={t`Chart`}
-            id="chart"
-            onClick={handleNavigateToGraphTypeSelect}
-          />
-        </SelectableListItem>
-        <SelectableListItem
-          itemId="record-table"
-          onEnter={handleNavigateToRecordTableSettings}
-        >
-          <CommandMenuItem
-            Icon={IconTable}
-            label={t`View`}
-            id="record-table"
-            onClick={handleNavigateToRecordTableSettings}
-          />
-        </SelectableListItem>
+      <SidePanelGroup heading={t`Charts`}>
+        {GRAPH_TYPE_OPTIONS.map((graphType) => (
+          <SelectableListItem
+            key={graphType}
+            itemId={graphType}
+            onEnter={() => handleCreateChartWidget(graphType)}
+          >
+            <CommandMenuItem
+              Icon={GRAPH_TYPE_INFORMATION[graphType].icon}
+              label={t(GRAPH_TYPE_INFORMATION[graphType].label)}
+              id={graphType}
+              onClick={() => handleCreateChartWidget(graphType)}
+            />
+          </SelectableListItem>
+        ))}
+      </SidePanelGroup>
+
+      {viewLayoutItems.length > 0 && (
+        <SidePanelGroup heading={t`Views`}>
+          {viewLayoutItems.map((viewLayoutItem) => {
+            const { viewType } = viewLayoutItem;
+            const { Icon, label } =
+              RECORD_TABLE_WIDGET_LAYOUT_OPTIONS[viewType];
+
+            return (
+              <SelectableListItem
+                key={viewType}
+                itemId={viewType}
+                onEnter={() => handleCreateViewWidget(viewLayoutItem)}
+              >
+                <CommandMenuItem
+                  Icon={Icon}
+                  label={t(label)}
+                  id={viewType}
+                  onClick={() => handleCreateViewWidget(viewLayoutItem)}
+                />
+              </SelectableListItem>
+            );
+          })}
+        </SidePanelGroup>
+      )}
+
+      <SidePanelGroup heading={t`Other`}>
         <SelectableListItem
           itemId="iframe"
           onEnter={handleNavigateToIframeSettings}

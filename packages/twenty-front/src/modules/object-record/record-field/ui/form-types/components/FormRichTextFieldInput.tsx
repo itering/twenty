@@ -1,8 +1,8 @@
 import { FormAdvancedTextFieldInput } from '@/advanced-text-editor/components/FormAdvancedTextFieldInput';
 import { RECORD_RICH_TEXT_EDITOR_PROFILE } from '@/object-record/record-field/ui/form-types/constants/RecordRichTextEditorProfile';
-import { type VariablePickerComponent } from '@/object-record/record-field/ui/form-types/types/VariablePickerComponent';
+import { type VariablePickerComponent } from '@/ui/input/types/VariablePickerComponent';
 import { type FieldRichTextValue } from '@/object-record/record-field/ui/types/FieldMetadata';
-import { convertTipTapDocumentToBlockNote } from '@/object-record/record-field/ui/form-types/utils/convertTipTapDocumentToBlockNote';
+import { getRichTextFieldSerializedContent } from '@/object-record/record-field/ui/utils/getRichTextFieldSerializedContent';
 
 type FormRichTextFieldInputProps = {
   label?: string;
@@ -28,10 +28,9 @@ export const FormRichTextFieldInput = ({
 }: FormRichTextFieldInputProps) => {
   const handleChange = (value: string) => {
     onChange({
-      // RICH_TEXT still exposes the legacy BlockNote array contract. Keep the
-      // compatibility projection here until that field is migrated to TipTap.
-      blocknote: convertTipTapDocumentToBlockNote(value),
+      blocknote: null,
       markdown: null,
+      tiptap: value,
     });
   };
 
@@ -40,7 +39,7 @@ export const FormRichTextFieldInput = ({
       label={label}
       error={error}
       hint={hint}
-      defaultValue={defaultValue?.blocknote ?? defaultValue?.markdown}
+      defaultValue={getRichTextFieldSerializedContent(defaultValue)}
       placeholder={placeholder}
       onChange={handleChange}
       readonly={readonly}

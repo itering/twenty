@@ -1,9 +1,10 @@
 import React from 'react';
-import type { IconComponent } from 'twenty-ui/icon';
-import { LightIconButton } from 'twenty-ui/input';
+import { isDefined } from 'twenty-shared/utils';
+import { LightIconButton } from 'twenty-ui/components/input';
+import { type IconComponent } from 'twenty-ui/icon';
 
 type BubbleMenuIconButtonProps = {
-  className?: string;
+  label: string;
   Icon?: IconComponent;
   disabled?: boolean;
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -11,7 +12,7 @@ type BubbleMenuIconButtonProps = {
 };
 
 export const BubbleMenuIconButton = ({
-  className,
+  label,
   Icon,
   disabled = false,
   onClick,
@@ -19,12 +20,14 @@ export const BubbleMenuIconButton = ({
 }: BubbleMenuIconButtonProps) => {
   return (
     <LightIconButton
-      className={className}
-      Icon={Icon}
       disabled={disabled}
+      aria-pressed={isActive}
       onClick={onClick}
-      accent={isActive === true ? 'secondary' : 'tertiary'}
-      size="small"
-    />
+      variant={isActive ? 'soft' : 'ghost'}
+      size="sm"
+      aria-label={label}
+    >
+      {isDefined(Icon) && <Icon />}
+    </LightIconButton>
   );
 };

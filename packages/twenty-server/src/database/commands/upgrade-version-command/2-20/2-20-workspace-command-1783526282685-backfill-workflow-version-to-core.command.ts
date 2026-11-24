@@ -1,14 +1,14 @@
 import { Command } from 'nest-commander';
-import { EntityMetadataNotFoundError } from 'typeorm/error/EntityMetadataNotFoundError';
+import { isWorkspaceObjectNotFoundError } from 'src/database/commands/upgrade-version-command/utils/is-workspace-object-not-found-error.util';
 
 import { ProvisionedWorkspaceCommandRunner } from 'src/database/commands/command-runners/provisioned-workspace.command-runner';
 import { WorkspaceIteratorService } from 'src/database/commands/command-runners/workspace-iterator.service';
 import { type RunOnWorkspaceArgs } from 'src/database/commands/command-runners/workspace.command-runner';
 import { RegisteredWorkspaceCommand } from 'src/engine/core-modules/upgrade/decorators/registered-workspace-command.decorator';
-import { WorkflowVersionCoreSyncService } from 'src/engine/core-modules/workflow/services/workflow-version-core-sync.service';
 import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
-import { GlobalWorkspaceOrmManager } from 'src/engine/twenty-orm/global-workspace-datasource/global-workspace-orm.manager';
-import { type WorkflowVersionWorkspaceEntity } from 'src/modules/workflow/common/standard-objects/workflow-version.workspace-entity';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { type LegacyWorkflowVersionWorkspaceEntity } from 'src/database/commands/upgrade-version-command/2-20/types/legacy-workflow-version-workspace-entity.type';
+import { LegacyWorkflowVersionCoreUpsertService } from 'src/database/commands/upgrade-version-command/2-20/services/legacy-workflow-version-core-upsert.service';
 
 @RegisteredWorkspaceCommand('2.20.0', 1783526282685)
 @Command({
@@ -19,8 +19,8 @@ import { type WorkflowVersionWorkspaceEntity } from 'src/modules/workflow/common
 export class BackfillWorkflowVersionToCoreCommand extends ProvisionedWorkspaceCommandRunner {
   constructor(
     protected readonly workspaceIteratorService: WorkspaceIteratorService,
-    private readonly globalWorkspaceOrmManager: GlobalWorkspaceOrmManager,
-    private readonly workflowVersionCoreSyncService: WorkflowVersionCoreSyncService,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
+    private readonly legacyWorkflowVersionCoreUpsertService: LegacyWorkflowVersionCoreUpsertService,
   ) {
     super(workspaceIteratorService);
   }
@@ -29,25 +29,21 @@ export class BackfillWorkflowVersionToCoreCommand extends ProvisionedWorkspaceCo
     workspaceId,
     options,
   }: RunOnWorkspaceArgs): Promise<void> {
-    let workspaceWorkflowVersions: WorkflowVersionWorkspaceEntity[];
+    let workspaceWorkflowVersions: LegacyWorkflowVersionWorkspaceEntity[];
 
     try {
       workspaceWorkflowVersions =
-        await this.globalWorkspaceOrmManager.executeInWorkspaceContext(
+        await this.workspaceOrmManager.executeInWorkspaceContext(
           async () => {
             const workflowVersionRepository =
-              await this.globalWorkspaceOrmManager.getRepository<WorkflowVersionWorkspaceEntity>(
-                workspaceId,
-                'workflowVersion',
-                { shouldBypassPermissionChecks: true },
-              );
+              this.workspaceOrmManager.getRepositoryWithoutPermissionChecks<LegacyWorkflowVersionWorkspaceEntity>('workflowVersion');
 
             return workflowVersionRepository.find();
           },
           buildSystemAuthContext(workspaceId),
         );
     } catch (error) {
-      if (error instanceof EntityMetadataNotFoundError) {
+      if (isWorkspaceObjectNotFoundError(error)) {
         this.logger.log(
           `workflowVersion object does not exist for workspace ${workspaceId}, skipping`,
         );
@@ -66,10 +62,10 @@ export class BackfillWorkflowVersionToCoreCommand extends ProvisionedWorkspaceCo
       return;
     }
 
-    await this.workflowVersionCoreSyncService.upsertToCore(
+    await this.legacyWorkflowVersionCoreUpsertService.upsert({
       workspaceId,
-      workspaceWorkflowVersions,
-    );
+      workflowVersions: workspaceWorkflowVersions,
+    });
 
     this.logger.log(
       `Backfilled ${workspaceWorkflowVersions.length} workflowVersion row(s) into core for workspace ${workspaceId}`,

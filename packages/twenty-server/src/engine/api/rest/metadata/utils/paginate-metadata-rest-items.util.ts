@@ -1,6 +1,6 @@
 import { type MetadataRestListResponse } from 'src/engine/api/rest/metadata/types/metadata-rest-list-response.type';
 import { parseMetadataRestPagination } from 'src/engine/api/rest/metadata/utils/parse-metadata-rest-pagination.util';
-import { type AuthenticatedRequest } from 'src/engine/api/rest/types/authenticated-request';
+import { type AuthenticatedRequest } from 'src/engine/api/rest/types/authenticated-request.type';
 import { paginateMetadataOrderedItems } from 'src/engine/metadata-modules/pagination/utils/paginate-metadata-ordered-items.util';
 
 export const paginateMetadataRestItems = <T extends { id: string }>({
@@ -8,7 +8,7 @@ export const paginateMetadataRestItems = <T extends { id: string }>({
   request,
 }: {
   items: T[];
-  request: AuthenticatedRequest;
+  request: Pick<AuthenticatedRequest, 'query'>;
 }): MetadataRestListResponse<T> => {
   const page = paginateMetadataOrderedItems({
     items,

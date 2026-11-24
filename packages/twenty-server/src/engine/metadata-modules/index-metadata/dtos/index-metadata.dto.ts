@@ -17,7 +17,7 @@ import {
 
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
 import { IsValidMetadataName } from 'src/engine/decorators/metadata/is-valid-metadata-name.decorator';
-import { IndexType } from 'src/engine/metadata-modules/index-metadata/types/indexType.types';
+import { IndexType } from 'twenty-shared/types';
 
 registerEnumType(IndexType, {
   name: 'IndexType',
@@ -38,14 +38,17 @@ export class IndexMetadataDTO {
   name: string;
 
   @IsBoolean()
-  @IsOptional()
-  @Field({ nullable: true })
-  isCustom?: boolean;
-
-  @IsBoolean()
   @IsNotEmpty()
   @Field()
   isUnique: boolean;
+
+  @IsUUID()
+  @Field(() => UUIDScalarType)
+  applicationId: string;
+
+  @IsBoolean()
+  @Field()
+  isSystemSideEffect: boolean;
 
   @IsString()
   @IsOptional()

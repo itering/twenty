@@ -6,8 +6,10 @@ import { ALL_METADATA_NAME } from 'twenty-shared/metadata';
 import { FileFolder } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
+import { APPLICATION_SOURCE_ENTRY_EXTENSIONS } from 'src/engine/core-modules/file-storage/constants/application-source-entry-extensions.constant';
 import { validateFilePath } from 'src/engine/core-modules/file-storage/utils/validate-file-path.util';
 import { findFlatEntityByUniversalIdentifier } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-universal-identifier.util';
+import { validateFrontComponentUniversalWidgetAvailability } from 'src/engine/metadata-modules/flat-front-component/validators/utils/validate-front-component-universal-widget-availability.util';
 import { FrontComponentExceptionCode } from 'src/engine/metadata-modules/front-component/front-component.exception';
 import { type FailedFlatEntityValidation } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/builders/types/failed-flat-entity-validation.type';
 import { getEmptyFlatEntityValidationError } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/builders/utils/get-flat-entity-validation-error.util';
@@ -18,6 +20,9 @@ import { type UniversalFlatEntityValidationArgs } from 'src/engine/workspace-man
 export class FlatFrontComponentValidatorService {
   public validateFlatFrontComponentCreation({
     flatEntityToValidate: flatFrontComponent,
+    optimisticFlatEntityMapsAndRelatedFlatEntityMaps: {
+      flatObjectMetadataMaps,
+    },
   }: UniversalFlatEntityValidationArgs<
     typeof ALL_METADATA_NAME.frontComponent
   >): FailedFlatEntityValidation<'frontComponent', 'create'> {
@@ -57,6 +62,7 @@ export class FlatFrontComponentValidatorService {
       const sourcePathResult = validateFilePath({
         resourcePath: flatFrontComponent.sourceComponentPath,
         fileFolder: FileFolder.Source,
+        allowedExtensions: APPLICATION_SOURCE_ENTRY_EXTENSIONS,
       });
 
       if (!sourcePathResult.isValid) {
@@ -67,6 +73,14 @@ export class FlatFrontComponentValidatorService {
         });
       }
     }
+
+    validationResult.errors.push(
+      ...validateFrontComponentUniversalWidgetAvailability({
+        universalWidgetAvailability:
+          flatFrontComponent.universalWidgetAvailability,
+        flatObjectMetadataMaps,
+      }),
+    );
 
     return validationResult;
   }
@@ -111,6 +125,7 @@ export class FlatFrontComponentValidatorService {
     flatEntityUpdate,
     optimisticFlatEntityMapsAndRelatedFlatEntityMaps: {
       flatFrontComponentMaps: optimisticFlatFrontComponentMaps,
+      flatObjectMetadataMaps,
     },
   }: FlatEntityUpdateValidationArgs<
     typeof ALL_METADATA_NAME.frontComponent
@@ -157,6 +172,7 @@ export class FlatFrontComponentValidatorService {
       const sourcePathResult = validateFilePath({
         resourcePath: flatEntityUpdate.sourceComponentPath,
         fileFolder: FileFolder.Source,
+        allowedExtensions: APPLICATION_SOURCE_ENTRY_EXTENSIONS,
       });
 
       if (!sourcePathResult.isValid) {
@@ -166,6 +182,16 @@ export class FlatFrontComponentValidatorService {
           userFriendlyMessage: msg`Source component path is invalid`,
         });
       }
+    }
+
+    if (isDefined(flatEntityUpdate.universalWidgetAvailability)) {
+      validationResult.errors.push(
+        ...validateFrontComponentUniversalWidgetAvailability({
+          universalWidgetAvailability:
+            flatEntityUpdate.universalWidgetAvailability,
+          flatObjectMetadataMaps,
+        }),
+      );
     }
 
     return validationResult;

@@ -1,0 +1,107 @@
+import { type MessageDescriptor } from '@lingui/core';
+import { msg } from '@lingui/core/macro';
+
+import { FeatureFlagKey } from '~/generated-admin/graphql';
+
+// Public flags use server-provided client config metadata to stay consistent with the lab.
+export const SETTINGS_ADMIN_FEATURE_FLAG_METADATA: Record<
+  FeatureFlagKey,
+  { label: MessageDescriptor; description: MessageDescriptor }
+> = {
+  [FeatureFlagKey.IS_CONFIGURABLE_SEARCH_FIELDS_ENABLED]: {
+    label: msg`Configurable search fields`,
+    description: msg`Choose which fields are used when searching for records.`,
+  },
+  [FeatureFlagKey.IS_REST_METADATA_API_NEW_FORMAT_DIRECT]: {
+    label: msg`Direct REST metadata responses`,
+    description: msg`Return metadata directly instead of wrapping it in the legacy response envelope.`,
+  },
+  [FeatureFlagKey.IS_RECORD_LEVEL_SHARING_ENABLED]: {
+    label: msg`Record sharing`,
+    description: msg`Let people restrict and share individual records.`,
+  },
+  [FeatureFlagKey.IS_CALENDAR_EVENT_SHARED_ACROSS_CHANNELS_ENABLED]: {
+    label: msg`Share calendar events across channels`,
+    description: msg`Store a meeting synced by several calendars of the same provider once, instead of once per calendar.`,
+  },
+  [FeatureFlagKey.IS_CALENDAR_INTERNAL_EVENTS_FILTER_ENABLED]: {
+    label: msg`Skip internal meetings`,
+    description: msg`Skip calendar events with no participant outside the workspace domain, unless internal import is turned on.`,
+  },
+  [FeatureFlagKey.IS_INTERNAL_IMPORT_COLUMN_ENABLED]: {
+    label: msg`Internal import setting column`,
+    description: msg`Read the internal import setting from its new workspace column. Turned on by the 2.59 upgrade.`,
+  },
+  [FeatureFlagKey.IS_CALENDAR_RECURRING_EVENT_HORIZON_ENABLED]: {
+    label: msg`Import recurring meetings 90 days ahead`,
+    description: msg`Import occurrences of recurring Google Calendar meetings up to 90 days ahead only, and import later occurrences as they come within 90 days.`,
+  },
+  [FeatureFlagKey.IS_CUSTOMIZABLE_SIDEBAR_ENABLED]: {
+    label: msg`Customizable sidebar`,
+    description: msg`Show sidebar tabs and sections.`,
+  },
+  [FeatureFlagKey.IS_AI_CHAT_COMPONENT_BUILDER_ENABLED]: {
+    label: msg`AI chat component builder`,
+    description: msg`Create and preview frontend components in AI chat before adding them to the Workspace app.`,
+  },
+  [FeatureFlagKey.IS_AI_CHAT_INBOX_ENABLED]: {
+    label: msg`AI chat inbox`,
+    description: msg`Turn the AI tab into an inbox to triage, assign, snooze and follow chats, let workflows send messages and agent questions to a member's inbox, and show a Conversations tab on record pages.`,
+  },
+  [FeatureFlagKey.IS_AGENT_CHAT_DIRECT_MESSAGE_IDENTITY_ENABLED]: {
+    label: msg`Direct message pair identity`,
+    description: msg`Reuse the same conversation when the same two workspace members start a direct message. Enabled after the workspace upgrade completes.`,
+  },
+  [FeatureFlagKey.IS_MCP_SERVERS_ENABLED]: {
+    label: msg`MCP servers`,
+    description: msg`Register external MCP servers in Developers settings and expose their tools to AI chat.`,
+  },
+  [FeatureFlagKey.IS_CREATE_RECORDS_PERMISSION_ENABLED]: {
+    label: msg`Create records permission`,
+    description: msg`Check the create permission on its own when creating records, rather than the update permission.`,
+  },
+  [FeatureFlagKey.IS_RELATED_RECORD_PATHS_ENABLED]: {
+    label: msg`Related record paths`,
+    description: msg`Define the relations along which a record's permissions extend to related records.`,
+  },
+  [FeatureFlagKey.IS_ROW_LEVEL_PERMISSION_RELATION_HOP_ENABLED]: {
+    label: msg`Record rules through relations`,
+    description: msg`Let record-level permission rules compare a field of a related record.`,
+  },
+  [FeatureFlagKey.IS_CHANNEL_VISIBILITY_RLS_ENABLED]: {
+    label: msg`Channel visibility through rules`,
+    description: msg`In progress: enforce message and calendar channel visibility with record-level permission rules. Needs relation hops and related record paths.`,
+  },
+  [FeatureFlagKey.IS_GETTING_STARTED_ENABLED]: {
+    label: msg`Getting started`,
+    description: msg`Show the Getting started page and sidebar card, and open it on landing during the trial.`,
+  },
+  [FeatureFlagKey.IS_MESSAGE_ATTACHMENT_ENABLED]: {
+    label: msg`Message attachments`,
+    description: msg`Store and show files attached to messages. Enabled after the workspace upgrade completes.`,
+  },
+  [FeatureFlagKey.IS_PRIVATE_RECORDS_ENABLED]: {
+    label: msg`Private records`,
+    description: msg`Apply private records on objects that aren't private by default. Always on for workspaces that have set record sharing. Turning this off makes records set as private on those objects visible again.`,
+  },
+  [FeatureFlagKey.IS_ACCESS_GROUPS_ENABLED]: {
+    label: msg`Access groups`,
+    description: msg`Compute the access groups that record listings will use for row-level permissions. Enable after the workspace upgrade completes.`,
+  },
+  [FeatureFlagKey.IS_AI_DATA_POLICY_ENABLED]: {
+    label: msg`AI data policy and Privacy tab`,
+    description: msg`Show the Privacy tab and enforce its AI data policy and data sharing settings. Turning this off lifts any stored policy. Enable after the instance upgrade completes.`,
+  },
+  [FeatureFlagKey.IS_RECORD_GROUP_TABS_ENABLED]: {
+    label: msg`Group tabs`,
+    description: msg`Let grouped table and list views show their groups as tabs, one group at a time. Enable after the instance upgrade completes.`,
+  },
+  [FeatureFlagKey.IS_APPLICATION_PRICE_BILLING_ENABLED]: {
+    label: msg`Application price billing`,
+    description: msg`Bill the prices declared by installed apps on the workspace subscription. The price is not shown before install yet.`,
+  },
+  [FeatureFlagKey.IS_LOOKUP_COLUMNS_ENABLED]: {
+    label: msg`Lookup columns`,
+    description: msg`Add table columns that show a field of a related record, such as a person's company industry. Enable after the instance upgrade completes.`,
+  },
+};

@@ -1,38 +1,16 @@
 import { type FieldMetadataType } from '@/types/FieldMetadataType';
 import { type IsExactly } from '@/types/IsExactly';
-
-export type TagColor =
-  | 'red'
-  | 'ruby'
-  | 'crimson'
-  | 'tomato'
-  | 'orange'
-  | 'amber'
-  | 'yellow'
-  | 'lime'
-  | 'grass'
-  | 'green'
-  | 'jade'
-  | 'mint'
-  | 'turquoise'
-  | 'cyan'
-  | 'sky'
-  | 'blue'
-  | 'iris'
-  | 'violet'
-  | 'purple'
-  | 'plum'
-  | 'pink'
-  | 'bronze'
-  | 'gold'
-  | 'brown'
-  | 'gray';
+import { type TagColor } from '@/types/TagColor';
 
 export class FieldMetadataDefaultOption {
   id?: string;
   position: number;
   label: string;
   value: string;
+  // Only stored when false: an inactive option stays on records but can no longer be picked.
+  isActive?: boolean;
+  // Read-only: set when the option is owned by another application than its field. Never stored.
+  applicationId?: string;
 }
 
 export class FieldMetadataComplexOption extends FieldMetadataDefaultOption {

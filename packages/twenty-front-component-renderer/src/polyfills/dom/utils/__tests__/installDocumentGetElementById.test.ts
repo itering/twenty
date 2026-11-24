@@ -1,7 +1,11 @@
+import '@/remote/generated/remote-elements';
+
+import { patchRemoteElementAttributes } from '@/remote/elements/utils/patchRemoteElementAttributes';
+
 import { installDocumentGetElementById } from '../installDocumentGetElementById';
 
 type FakeNode = {
-  childNodes: FakeNode[];
+  childNodes: (FakeNode | HTMLElement)[];
   getAttribute?: (attributeName: string) => string | null;
 };
 
@@ -64,6 +68,18 @@ describe('installDocumentGetElementById', () => {
     documentTarget.childNodes.push(textLikeNode, target);
 
     expect(documentTarget.getElementById('probe')).toBe(target);
+  });
+
+  it('should find a remote element whose id was set as a property', () => {
+    patchRemoteElementAttributes();
+
+    const documentTarget = createDocumentTarget();
+    const remoteElement: HTMLElement = document.createElement('html-div');
+
+    remoteElement.id = 'set-by-react';
+    documentTarget.childNodes.push(remoteElement);
+
+    expect(documentTarget.getElementById('set-by-react')).toBe(remoteElement);
   });
 
   it('should not override an existing getElementById', () => {

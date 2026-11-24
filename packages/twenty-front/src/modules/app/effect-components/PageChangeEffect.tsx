@@ -1,21 +1,28 @@
+import { useContinueAiChatPageInSidePanel } from '@/ai-chat/hooks/useContinueAiChatPageInSidePanel';
 import { useExecuteTasksOnAnyLocationChange } from '@/app/hooks/useExecuteTasksOnAnyLocationChange';
-import { isAppEffectRedirectEnabledState } from '@/app/states/isAppEffectRedirectEnabledState';
+import { useOpenWorkspaceSetupChatInSidePanel } from '@/onboarding/hooks/useOpenWorkspaceSetupChatInSidePanel';
+import { useRefreshShownInboxThreadList } from '@/inbox/hooks/useRefreshShownInboxThreadList';
+import { useWorkspaceRouteObjects } from '@/app/routing/components/WorkspaceRouteObjectsProvider';
+import { isAppEffectRedirectEnabledState } from '@/auth/states/isAppEffectRedirectEnabledState';
 import { useReturnToPath } from '@/auth/hooks/useReturnToPath';
 import { useIsOnAuthOrOnboardingPage } from '@/auth/hooks/useIsOnAuthOrOnboardingPage';
+import { isLogConsoleFullScreenState } from '@/log-console/states/isLogConsoleFullScreenState';
+import { useSidePanelHistory } from '@/side-panel/hooks/useSidePanelHistory';
 import { useSidePanelMenu } from '@/side-panel/hooks/useSidePanelMenu';
+import { SIDE_PANEL_PATH_SEARCH_PARAM } from '@/side-panel/routing/constants/SidePanelPathSearchParam';
+import { isWorkspaceLocationAvailableOnSurface } from '@/app/routing/utils/isWorkspaceLocationAvailableOnSurface';
 import { isSidePanelOpenedState } from '@/side-panel/states/isSidePanelOpenedState';
-import { sidePanelPageState } from '@/side-panel/states/sidePanelPageState';
+import { sidePanelNavigationStackState } from '@/side-panel/states/sidePanelNavigationStackState';
+import { sidePanelPageInfoSelector } from '@/side-panel/states/sidePanelPageInfoSelector';
 import { MAIN_CONTEXT_STORE_INSTANCE_ID } from '@/context-store/constants/MainContextStoreInstanceId';
 import { contextStoreCurrentViewIdComponentState } from '@/context-store/states/contextStoreCurrentViewIdComponentState';
 import { contextStoreCurrentViewTypeComponentState } from '@/context-store/states/contextStoreCurrentViewTypeComponentState';
 import { ContextStoreViewType } from '@/context-store/types/ContextStoreViewType';
-import { CoreObjectNamePlural } from '@/object-metadata/types/CoreObjectNamePlural';
-import { shouldOpenAiChatAfterOnboardingState } from '@/onboarding/states/shouldOpenAiChatAfterOnboardingState';
+import { StandardObjectNamePlural } from '@/object-metadata/types/StandardObjectNamePlural';
 import { useActiveRecordBoardCard } from '@/object-record/record-board/hooks/useActiveRecordBoardCard';
 import { useFocusedRecordBoardCard } from '@/object-record/record-board/hooks/useFocusedRecordBoardCard';
-import { useResetRecordBoardSelection } from '@/object-record/record-board/hooks/useResetRecordBoardSelection';
 import { useResetFocusStackToRecordIndex } from '@/object-record/record-index/hooks/useResetFocusStackToRecordIndex';
-import { useResetTableRowSelection } from '@/object-record/record-table/hooks/internal/useResetTableRowSelection';
+import { useResetRecordSelection } from '@/object-record/record-selection/hooks/useResetRecordSelection';
 import { useActiveRecordTableRow } from '@/object-record/record-table/hooks/useActiveRecordTableRow';
 import { useFocusedRecordTableRow } from '@/object-record/record-table/hooks/useFocusedRecordTableRow';
 import { useOpenNewRecordTitleCell } from '@/object-record/record-title-cell/hooks/useOpenNewRecordTitleCell';
@@ -28,22 +35,15 @@ import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/use
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { currentPageLayoutIdState } from '@/page-layout/states/currentPageLayoutIdState';
 import { useStore } from 'jotai';
-import { useCallback, useEffect, useState } from 'react';
-import {
-  matchPath,
-  useLocation,
-  useNavigate,
-  useParams,
-} from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { AppBasePath, AppPath, SidePanelPages } from 'twenty-shared/types';
-import { isDefined } from 'twenty-shared/utils';
-import { usePageChangeEffectNavigateLocation } from '~/hooks/usePageChangeEffectNavigateLocation';
-import { getPageLayoutIdForLocation } from '~/modules/app/utils/getPageLayoutIdForLocation';
-import { isAiChatPath } from '~/utils/isAiChatPath';
+import { isDefined, isSafeInternalPath } from 'twenty-shared/utils';
+import { usePageChangeEffectNavigateLocation } from '@/app/hooks/usePageChangeEffectNavigateLocation';
+import { getPageLayoutIdForLocation } from '@/app/utils/getPageLayoutIdForLocation';
 import { isMatchingLocation } from '~/utils/isMatchingLocation';
 
 // TODO: break down into smaller functions and / or hooks
-//  - moved usePageChangeEffectNavigateLocation into dedicated hook
 export const PageChangeEffect = () => {
   const store = useStore();
   const navigate = useNavigate();
@@ -51,14 +51,28 @@ export const PageChangeEffect = () => {
   const [previousLocation, setPreviousLocation] = useState('');
 
   const location = useLocation();
+  const workspaceRouteObjects = useWorkspaceRouteObjects();
+
+  const sidePanelPathFromUrl = new URLSearchParams(location.search).get(
+    SIDE_PANEL_PATH_SEARCH_PARAM,
+  );
+
+  const hasRoutedSidePanelTarget =
+    isDefined(sidePanelPathFromUrl) &&
+    isSafeInternalPath(sidePanelPathFromUrl) &&
+    isWorkspaceLocationAvailableOnSurface(
+      workspaceRouteObjects,
+      'side-panel',
+      sidePanelPathFromUrl,
+    );
 
   const pageChangeEffectNavigateLocation =
     usePageChangeEffectNavigateLocation();
 
-  //TODO: refactor useResetTableRowSelection hook to not throw when the argument `recordTableId` is an empty string
-  // - replace CoreObjectNamePlural.Person
+  // TODO: make useResetRecordSelection accept an empty recordIndexId, then drop StandardObjectNamePlural.Person
   const objectNamePlural =
-    useParams().objectNamePlural ?? CoreObjectNamePlural.Person;
+    matchPath(AppPath.RecordIndexPage, location.pathname)?.params
+      .objectNamePlural ?? StandardObjectNamePlural.Person;
 
   const contextStoreCurrentViewId = useAtomComponentStateValue(
     contextStoreCurrentViewIdComponentState,
@@ -75,12 +89,10 @@ export const PageChangeEffect = () => {
     contextStoreCurrentViewId || '',
   );
 
-  const { resetTableRowSelection } = useResetTableRowSelection(recordIndexId);
+  const { resetRecordSelection } = useResetRecordSelection(recordIndexId);
   const { unfocusRecordTableRow } = useFocusedRecordTableRow(recordIndexId);
   const { deactivateRecordTableRow } = useActiveRecordTableRow(recordIndexId);
 
-  const { resetRecordBoardSelection } =
-    useResetRecordBoardSelection(recordIndexId);
   const { deactivateBoardCard } = useActiveRecordBoardCard(recordIndexId);
   const { unfocusBoardCard } = useFocusedRecordBoardCard(recordIndexId);
 
@@ -92,27 +104,15 @@ export const PageChangeEffect = () => {
   );
 
   const { closeSidePanelMenu } = useSidePanelMenu();
+  const { continueAiChatPageInSidePanel } = useContinueAiChatPageInSidePanel();
+  const { openWorkspaceSetupChatInSidePanel } =
+    useOpenWorkspaceSetupChatInSidePanel();
+  const { removePageFromSidePanelHistory } = useSidePanelHistory();
 
   const { saveReturnToPath, getReturnToPath, clearReturnToPath } =
     useReturnToPath();
 
   const isOnAuthOrOnboardingPage = useIsOnAuthOrOnboardingPage();
-
-  const closeSidePanelUnlessNotRelevant = useCallback(() => {
-    const currentPage = store.get(sidePanelPageState.atom);
-
-    if (currentPage === SidePanelPages.NavigationMenuItemEdit) {
-      return;
-    }
-
-    const sidePanelIsAiChat = currentPage === SidePanelPages.AskAI;
-
-    if (sidePanelIsAiChat) {
-      return;
-    }
-
-    closeSidePanelMenu();
-  }, [closeSidePanelMenu, store]);
 
   const { resetFocusStackToFocusItem } = useResetFocusStackToFocusItem();
 
@@ -120,14 +120,46 @@ export const PageChangeEffect = () => {
 
   const { openNewRecordTitleCell } = useOpenNewRecordTitleCell();
 
-  useEffect(() => {
-    closeSidePanelUnlessNotRelevant();
-  }, [location.pathname, closeSidePanelUnlessNotRelevant]);
+  const { refreshShownInboxThreadList } = useRefreshShownInboxThreadList();
 
   useEffect(() => {
     if (!previousLocation || previousLocation !== location.pathname) {
+      const isAskAiOpenedInSidePanel =
+        !hasRoutedSidePanelTarget &&
+        (continueAiChatPageInSidePanel({
+          previousPathname: previousLocation,
+          location,
+        }) ||
+          (isWorkspaceLocationAvailableOnSurface(
+            workspaceRouteObjects,
+            'main',
+            location,
+          ) &&
+            openWorkspaceSetupChatInSidePanel(location)));
+
+      if (!hasRoutedSidePanelTarget && !isAskAiOpenedInSidePanel) {
+        const currentPage = store.get(sidePanelPageInfoSelector.atom).page;
+        const shouldKeepSidePanelOpen =
+          currentPage === SidePanelPages.AskAI ||
+          currentPage === SidePanelPages.RoutedPage;
+
+        if (!shouldKeepSidePanelOpen) {
+          closeSidePanelMenu();
+        } else {
+          // Leaving a page ends the layout edit it hosted, so its page layout
+          // pages must not be reachable again through the panel history
+          store
+            .get(sidePanelNavigationStackState.atom)
+            .filter((navigationItem) =>
+              isDefined(navigationItem.pageLayoutSidePanelTarget),
+            )
+            .forEach(({ pageId }) => removePageFromSidePanelHistory(pageId));
+        }
+      }
+
       setPreviousLocation(location.pathname);
       executeTasksOnAnyLocationChange();
+      store.set(isLogConsoleFullScreenState.atom, false);
 
       const newPageLayoutId = getPageLayoutIdForLocation({
         location,
@@ -136,7 +168,18 @@ export const PageChangeEffect = () => {
 
       store.set(currentPageLayoutIdState.atom, newPageLayoutId);
     }
-  }, [location, previousLocation, executeTasksOnAnyLocationChange, store]);
+  }, [
+    location,
+    previousLocation,
+    executeTasksOnAnyLocationChange,
+    store,
+    hasRoutedSidePanelTarget,
+    closeSidePanelMenu,
+    removePageFromSidePanelHistory,
+    continueAiChatPageInSidePanel,
+    workspaceRouteObjects,
+    openWorkspaceSetupChatInSidePanel,
+  ]);
 
   useEffect(() => {
     if (
@@ -160,13 +203,6 @@ export const PageChangeEffect = () => {
       if (consumedReturnToPath) {
         clearReturnToPath();
       }
-
-      if (
-        store.get(shouldOpenAiChatAfterOnboardingState.atom) &&
-        !isAiChatPath(pageChangeEffectNavigateLocation)
-      ) {
-        store.set(shouldOpenAiChatAfterOnboardingState.atom, false);
-      }
     }
   }, [
     navigate,
@@ -186,13 +222,13 @@ export const PageChangeEffect = () => {
     );
 
     if (isLeavingRecordIndexPage) {
+      resetRecordSelection();
+
       if (contextStoreCurrentViewType === ContextStoreViewType.Table) {
-        resetTableRowSelection();
         unfocusRecordTableRow();
         deactivateRecordTableRow();
       }
       if (contextStoreCurrentViewType === ContextStoreViewType.Kanban) {
-        resetRecordBoardSelection();
         deactivateBoardCard();
         unfocusBoardCard();
       }
@@ -203,7 +239,9 @@ export const PageChangeEffect = () => {
     }
 
     switch (true) {
-      case isMatchingLocation(location, AppPath.RecordIndexPage): {
+      case isMatchingLocation(location, AppPath.RecordIndexPage) ||
+        isMatchingLocation(location, AppPath.WorkflowIndexPage) ||
+        isMatchingLocation(location, AppPath.AgentIndexPage): {
         resetFocusStackToRecordIndex();
         break;
       }
@@ -242,6 +280,34 @@ export const PageChangeEffect = () => {
 
           store.set(newRecordTitleCellToOpenState.atom, null);
         }
+        break;
+      }
+      case isMatchingLocation(location, AppPath.AiChatInbox): {
+        const isEnteringInbox = !matchPath(
+          AppPath.AiChatInbox,
+          previousLocation,
+        );
+
+        if (!isEnteringInbox) {
+          break;
+        }
+
+        refreshShownInboxThreadList();
+
+        resetFocusStackToFocusItem({
+          focusStackItem: {
+            focusId: PageFocusId.AiChatInbox,
+            componentInstance: {
+              componentType: FocusComponentType.PAGE,
+              componentInstanceId: PageFocusId.AiChatInbox,
+            },
+            globalHotkeysConfig: {
+              enableGlobalHotkeysWithModifiers: true,
+              enableGlobalHotkeysConflictingWithKeyboard: true,
+            },
+          },
+          shouldKeepItemsAbovePage: store.get(isSidePanelOpenedState.atom),
+        });
         break;
       }
       case isMatchingLocation(location, AppPath.PageLayoutPage): {
@@ -393,15 +459,15 @@ export const PageChangeEffect = () => {
     location,
     previousLocation,
     contextStoreCurrentViewType,
-    resetTableRowSelection,
+    resetRecordSelection,
     unfocusRecordTableRow,
     deactivateRecordTableRow,
-    resetRecordBoardSelection,
     deactivateBoardCard,
     unfocusBoardCard,
     resetFocusStackToRecordIndex,
     resetFocusStackToFocusItem,
     openNewRecordTitleCell,
+    refreshShownInboxThreadList,
     store,
   ]);
 

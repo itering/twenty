@@ -1,6 +1,7 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 
-import { type NextFunction, type Request, type Response } from 'express';
+import { type NextFunction, type Request } from 'express';
+import { SESSION_COOKIE_OPT_IN_HEADER_NAME } from 'twenty-shared/constants';
 
 import { JwtWrapperService } from 'src/engine/core-modules/jwt/services/jwt-wrapper.service';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
@@ -11,7 +12,6 @@ describe('CookieSessionCsrfMiddleware', () => {
   let middleware: CookieSessionCsrfMiddleware;
 
   const defaultConfig: Record<string, unknown> = {
-    AUTH_COOKIE_SESSIONS_ENABLED: true,
     SERVER_URL: 'https://crm.example.com',
     FRONTEND_URL: 'https://front.example.com',
     AUTH_COOKIE_ALLOWED_ORIGINS: '',
@@ -19,22 +19,26 @@ describe('CookieSessionCsrfMiddleware', () => {
 
   let mockConfig: Record<string, unknown> = { ...defaultConfig };
 
+  // Opted in like the Twenty app: the server ignores the cookie otherwise, so there is nothing to check.
   const buildRequest = (overrides: Partial<Request> = {}): Request =>
     ({
       method: 'POST',
       protocol: 'https',
-      headers: {},
       get: jest.fn().mockReturnValue('crm.example.com'),
       ...overrides,
+      headers: {
+        [SESSION_COOKIE_OPT_IN_HEADER_NAME]: '1',
+        ...overrides.headers,
+      },
     }) as unknown as Request;
 
-  const buildResponse = (): Response => {
+  const buildResponse = () => {
     const response = {
       status: jest.fn(),
       json: jest.fn(),
-    } as unknown as Response;
+    };
 
-    (response.status as jest.Mock).mockReturnValue(response);
+    response.status.mockReturnValue(response);
 
     return response;
   };
@@ -90,6 +94,20 @@ describe('CookieSessionCsrfMiddleware', () => {
         authorization: 'Bearer some-jwt',
         cookie: '__Host-twenty-session=sess_token',
         origin: 'https://evil.example.org',
+      },
+    });
+
+    middleware.use(request, buildResponse(), next);
+
+    expect(next).toHaveBeenCalled();
+  });
+
+  it('should skip cookie requests that do not opt in to the session cookie', () => {
+    const request = buildRequest({
+      headers: {
+        cookie: '__Host-twenty-session=sess_token',
+        origin: 'https://evil.example.org',
+        [SESSION_COOKIE_OPT_IN_HEADER_NAME]: undefined,
       },
     });
 
@@ -206,21 +224,6 @@ describe('CookieSessionCsrfMiddleware', () => {
     );
   });
 
-  it('should skip when cookie sessions are disabled', () => {
-    mockConfig.AUTH_COOKIE_SESSIONS_ENABLED = false;
-
-    const request = buildRequest({
-      headers: {
-        cookie: '__Host-twenty-session=sess_token',
-        origin: 'https://evil.example.com',
-      },
-    });
-
-    middleware.use(request, buildResponse(), next);
-
-    expect(next).toHaveBeenCalled();
-  });
-
   it('should still guard a cookie request carrying a non-Bearer authorization header', () => {
     const request = buildRequest({
       headers: {
@@ -237,8 +240,6 @@ describe('CookieSessionCsrfMiddleware', () => {
     expect(response.status).toHaveBeenCalledWith(403);
   });
 
-  // The middleware guards every route, so callers that never hold a session
-  // cookie must pass without needing a per-route exclusion.
   describe('callers that carry no session cookie', () => {
     it('should allow a third-party webhook POST sending no Origin', () => {
       const request = buildRequest({

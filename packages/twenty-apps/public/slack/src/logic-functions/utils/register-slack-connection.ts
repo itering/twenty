@@ -2,9 +2,13 @@ import { WebClient } from '@slack/web-api';
 import { isNonEmptyString } from '@sniptt/guards';
 import { getConnection, kv } from 'twenty-sdk/logic-function';
 
+import { autoLinkSlackInstaller } from 'src/logic-functions/utils/auto-link-slack-installer';
 import { cacheSlackBotUserId } from 'src/logic-functions/utils/cache-slack-bot-user-id';
-import { getSlackConnectedAccountTeamKvKey } from 'src/logic-functions/utils/get-slack-connected-account-team-kv-key';
+import { getConnectionAccessTokenOrThrow } from 'src/logic-functions/utils/get-connection-access-token-or-throw';
 import { getSlackTeamKvKey } from 'src/logic-functions/utils/get-slack-team-kv-key';
+import { matchSlackRosterByEmail } from 'src/logic-functions/utils/match-slack-roster-by-email';
+import { setSlackConnectedAccountTeam } from 'src/logic-functions/utils/set-slack-connected-account-team';
+import { toErrorMessage } from 'src/logic-functions/utils/to-error-message.util';
 
 type RegisterSlackConnectionArgs = {
   connectedAccountId: string;
@@ -25,7 +29,7 @@ export const registerSlackConnection = async ({
   }
 
   const connection = await getConnection(connectedAccountId);
-  const client = new WebClient(connection.accessToken);
+  const client = new WebClient(getConnectionAccessTokenOrThrow(connection));
   const { team_id: teamId, user_id: botUserId } = await client.auth.test();
 
   if (!isNonEmptyString(teamId)) {
@@ -36,10 +40,33 @@ export const registerSlackConnection = async ({
     throw new Error('Slack auth.test returned no user_id for the bot');
   }
 
-  await kv.set(getSlackConnectedAccountTeamKvKey(connectedAccountId), teamId);
+  await setSlackConnectedAccountTeam({
+    connectedAccountId,
+    slackTeamId: teamId,
+  });
   await kv.set(getSlackTeamKvKey(teamId), null, { scope: 'SERVER' });
 
   await cacheSlackBotUserId(botUserId);
+
+  try {
+    await autoLinkSlackInstaller({
+      slackClient: client,
+      slackTeamId: teamId,
+      workspaceMemberId: connection.workspaceMemberId,
+    });
+  } catch (error) {
+    console.warn(
+      `[slack] installer auto-link skipped: ${toErrorMessage(error)}`,
+    );
+  }
+
+  try {
+    await matchSlackRosterByEmail({ slackClient: client, slackTeamId: teamId });
+  } catch (error) {
+    console.warn(
+      `[slack] roster email match skipped: ${toErrorMessage(error)}`,
+    );
+  }
 
   return { ok: true, teamId };
 };

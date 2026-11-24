@@ -1,8 +1,17 @@
-import { type Manifest } from 'twenty-shared/application';
+import {
+  APPLICATION_PACKAGE_YARN_LOCK_PATH,
+  type Manifest,
+} from 'twenty-shared/application';
+import {
+  getSharedDependenciesBuildManifestPath,
+  getSharedDependenciesTypeReferencesPath,
+} from 'twenty-shared/front-component-build';
 import { FileFolder } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
 
 export type ApplicationFileToStore = {
   relativePath: string;
+  resourcePath?: string;
   fileFolder: FileFolder;
   isRequired: boolean;
 };
@@ -15,6 +24,12 @@ export const buildApplicationFileList = (
       relativePath: 'package.json',
       fileFolder: FileFolder.Dependencies,
       isRequired: true,
+    },
+    {
+      relativePath: APPLICATION_PACKAGE_YARN_LOCK_PATH,
+      resourcePath: 'yarn.lock',
+      fileFolder: FileFolder.Dependencies,
+      isRequired: false,
     },
     {
       relativePath: 'manifest.json',
@@ -53,12 +68,56 @@ export const buildApplicationFileList = (
     );
   }
 
+  const sharedDependencies =
+    manifest.application.frontComponentSharedDependencies;
+
+  if (isDefined(sharedDependencies)) {
+    files.push(
+      {
+        relativePath: sharedDependencies.builtPath,
+        fileFolder: FileFolder.BuiltFrontComponent,
+        isRequired: true,
+      },
+      {
+        relativePath: getSharedDependenciesBuildManifestPath(
+          sharedDependencies.builtPath,
+        ),
+        fileFolder: FileFolder.Dependencies,
+        isRequired: false,
+      },
+      {
+        relativePath: getSharedDependenciesTypeReferencesPath(
+          sharedDependencies.builtPath,
+        ),
+        fileFolder: FileFolder.Dependencies,
+        isRequired: false,
+      },
+    );
+  }
+
   for (const publicAsset of manifest.publicAssets ?? []) {
     files.push({
       relativePath: publicAsset.filePath,
       fileFolder: FileFolder.PublicAsset,
       isRequired: true,
     });
+  }
+
+  for (const sourceFile of manifest.sourceFiles ?? []) {
+    const existingFile = files.find(
+      (file) =>
+        file.fileFolder === FileFolder.Source &&
+        file.relativePath === sourceFile.filePath,
+    );
+    if (isDefined(existingFile)) {
+      existingFile.isRequired = true;
+    } else {
+      files.push({
+        relativePath: sourceFile.filePath,
+        fileFolder: FileFolder.Source,
+        isRequired: true,
+      });
+    }
   }
 
   return files;

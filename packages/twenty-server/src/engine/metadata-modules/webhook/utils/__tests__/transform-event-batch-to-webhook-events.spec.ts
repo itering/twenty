@@ -3,26 +3,17 @@ import type { ObjectRecordEvent } from 'twenty-shared/database-events';
 import { type WorkspaceEventBatch } from 'src/engine/workspace-event-emitter/types/workspace-event-batch.type';
 import type { WebhookEntity } from 'src/engine/metadata-modules/webhook/entities/webhook.entity';
 import { transformEventBatchToWebhookEvents } from 'src/engine/metadata-modules/webhook/utils/transform-event-batch-to-webhook-events';
-import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+import { getFlatObjectMetadataMock } from 'src/engine/metadata-modules/flat-object-metadata/__mocks__/get-flat-object-metadata.mock';
 
-const mockObjectMetadata: FlatObjectMetadata = {
+const mockObjectMetadata = getFlatObjectMetadataMock({
   id: 'id',
+  universalIdentifier: 'id',
   nameSingular: 'nameSingular',
   namePlural: 'namePlural',
   workspaceId: 'workspaceId',
   labelSingular: 'Label Singular',
   labelPlural: 'Label Plural',
-  isRemote: false,
-  isActive: true,
-  isSystem: false,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  universalIdentifier: 'id',
-  fieldIds: [],
-  indexMetadataIds: [],
-  viewIds: [],
-  applicationId: null,
-} as unknown as FlatObjectMetadata;
+});
 
 describe('transformEventBatchToWebhookEvents', () => {
   it('should transform properly', () => {
@@ -32,6 +23,7 @@ describe('transformEventBatchToWebhookEvents', () => {
       name: 'objectNameSingular.created',
       events: [
         {
+          eventId: 'event-1',
           recordId: 'recordId-1',
           properties: {
             after: {
@@ -41,6 +33,7 @@ describe('transformEventBatchToWebhookEvents', () => {
           },
         },
         {
+          eventId: 'event-2',
           recordId: 'recordId-2',
           properties: {
             before: {
@@ -50,6 +43,7 @@ describe('transformEventBatchToWebhookEvents', () => {
           },
         },
         {
+          eventId: 'event-3',
           recordId: 'recordId-3',
           properties: {
             after: {
@@ -83,6 +77,9 @@ describe('transformEventBatchToWebhookEvents', () => {
     const expectedResultWithoutEventDate = [
       {
         targetUrl: 'targetUrl',
+
+        eventId: 'event-1',
+
         eventName: 'objectNameSingular.created',
         objectMetadata: {
           id: mockObjectMetadata.id,
@@ -98,6 +95,9 @@ describe('transformEventBatchToWebhookEvents', () => {
       },
       {
         targetUrl: 'targetUrl',
+
+        eventId: 'event-2',
+
         eventName: 'objectNameSingular.created',
         objectMetadata: {
           id: mockObjectMetadata.id,
@@ -113,6 +113,9 @@ describe('transformEventBatchToWebhookEvents', () => {
       },
       {
         targetUrl: 'targetUrl',
+
+        eventId: 'event-3',
+
         eventName: 'objectNameSingular.created',
         objectMetadata: {
           id: mockObjectMetadata.id,
@@ -130,6 +133,9 @@ describe('transformEventBatchToWebhookEvents', () => {
       },
       {
         targetUrl: 'targetUrl-2',
+
+        eventId: 'event-1',
+
         eventName: 'objectNameSingular.created',
         objectMetadata: {
           id: mockObjectMetadata.id,
@@ -145,6 +151,9 @@ describe('transformEventBatchToWebhookEvents', () => {
       },
       {
         targetUrl: 'targetUrl-2',
+
+        eventId: 'event-2',
+
         eventName: 'objectNameSingular.created',
         objectMetadata: {
           id: mockObjectMetadata.id,
@@ -160,6 +169,9 @@ describe('transformEventBatchToWebhookEvents', () => {
       },
       {
         targetUrl: 'targetUrl-2',
+
+        eventId: 'event-3',
+
         eventName: 'objectNameSingular.created',
         objectMetadata: {
           id: mockObjectMetadata.id,
@@ -193,6 +205,7 @@ describe('transformEventBatchToWebhookEvents', () => {
       name: 'webhook.created',
       events: [
         {
+          eventId: 'event-4',
           recordId: 'recordId-1',
           properties: {
             after: {
@@ -221,6 +234,9 @@ describe('transformEventBatchToWebhookEvents', () => {
     const expectedResultWithoutEventDate = [
       {
         targetUrl: 'targetUrl',
+
+        eventId: 'event-4',
+
         eventName: 'webhook.created',
         objectMetadata: {
           id: mockObjectMetadata.id,
@@ -253,6 +269,7 @@ describe('transformEventBatchToWebhookEvents', () => {
       name: 'objectNameSingular.updated',
       events: [
         {
+          eventId: 'event-5',
           recordId: 'recordId-1',
           properties: {
             after: { id: 'id-1', nameSingular: 'nameSingular-1' },
@@ -260,6 +277,7 @@ describe('transformEventBatchToWebhookEvents', () => {
           },
         },
         {
+          eventId: 'event-6',
           recordId: 'recordId-2',
           properties: {
             after: { id: 'id-2', nameSingular: 'nameSingular-2' },

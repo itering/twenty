@@ -19,8 +19,8 @@ import {
   BlocklistReimportCalendarEventsJob,
   type BlocklistReimportCalendarEventsJobData,
 } from 'src/modules/calendar/blocklist-manager/jobs/blocklist-reimport-calendar-events.job';
-import { OnDatabaseBatchEvent } from 'src/engine/api/graphql/graphql-query-runner/decorators/on-database-batch-event.decorator';
-import { DatabaseEventAction } from 'src/engine/api/graphql/graphql-query-runner/enums/database-event-action';
+import { OnDatabaseBatchEvent } from 'src/engine/workspace-event-emitter/decorators/on-database-batch-event.decorator';
+import { DatabaseEventAction } from 'src/engine/workspace-event-emitter/enums/database-event-action';
 
 @Injectable()
 export class CalendarBlocklistListener {
@@ -38,6 +38,10 @@ export class CalendarBlocklistListener {
     await this.messageQueueService.add<BlocklistItemDeleteCalendarEventsJobData>(
       BlocklistItemDeleteCalendarEventsJob.name,
       payload,
+      {
+        workspaceId: payload.workspaceId,
+        isWorkspaceJob: true,
+      },
     );
   }
 
@@ -50,6 +54,10 @@ export class CalendarBlocklistListener {
     await this.messageQueueService.add<BlocklistReimportCalendarEventsJobData>(
       BlocklistReimportCalendarEventsJob.name,
       payload,
+      {
+        workspaceId: payload.workspaceId,
+        isWorkspaceJob: true,
+      },
     );
   }
 
@@ -62,11 +70,19 @@ export class CalendarBlocklistListener {
     await this.messageQueueService.add<BlocklistItemDeleteCalendarEventsJobData>(
       BlocklistItemDeleteCalendarEventsJob.name,
       payload,
+      {
+        workspaceId: payload.workspaceId,
+        isWorkspaceJob: true,
+      },
     );
 
     await this.messageQueueService.add<BlocklistReimportCalendarEventsJobData>(
       BlocklistReimportCalendarEventsJob.name,
       payload,
+      {
+        workspaceId: payload.workspaceId,
+        isWorkspaceJob: true,
+      },
     );
   }
 }

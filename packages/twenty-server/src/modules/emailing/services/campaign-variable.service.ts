@@ -6,14 +6,19 @@ import {
   type CampaignVariableDefinition,
   isDefined,
   listCampaignVariablesForFields,
+  readLruEntry,
+  writeLruEntry,
 } from 'twenty-shared/utils';
 
 import {
   EmailingDomainException,
   EmailingDomainExceptionCode,
 } from 'src/engine/core-modules/emailing-domain/exceptions/emailing-domain.exception';
-import { getFlatFieldsFromFlatObjectMetadata } from 'src/engine/api/graphql/workspace-schema-builder/utils/get-flat-fields-for-flat-object-metadata.util';
+import { resolveFlatFieldMetadataOptions } from 'src/engine/metadata-modules/flat-field-metadata-option/utils/resolve-flat-field-metadata-options.util';
+import { getFlatFieldsFromFlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/utils/get-flat-fields-for-flat-object-metadata.util';
 import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { type FlatFieldMetadataMaps } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata-maps.type';
+import { type FlatObjectMetadataMaps } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata-maps.type';
 import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
 import { type PersonWorkspaceEntity } from 'src/modules/person/standard-objects/person.workspace-entity';
 
@@ -22,12 +27,29 @@ export type PersonCampaignVariables = {
   knownVariableNames: Set<string>;
 };
 
+type PersonVariableSchema = PersonCampaignVariables & {
+  fieldsByName: Map<string, FlatFieldMetadata>;
+};
+
 const COMPUTED_VARIABLE_NAMES = ['fullName', 'personId'];
 
 const MAX_VARIABLES_IN_ERROR_MESSAGE = 40;
 
+const PERSON_FIELD_CACHE_KEYS = [
+  'flatObjectMetadataMaps',
+  'flatFieldMetadataMaps',
+  'flatFieldMetadataOptionMaps',
+] as const;
+
+const MAX_CACHED_WORKSPACE_SCHEMAS = 100;
+
 @Injectable()
 export class CampaignVariableService {
+  private readonly schemaByWorkspaceId = new Map<
+    string,
+    { hash: string; schema: PersonVariableSchema }
+  >();
+
   constructor(
     private readonly flatEntityMapsCacheService: WorkspaceManyOrAllFlatEntityMapsCacheService,
   ) {}
@@ -35,14 +57,60 @@ export class CampaignVariableService {
   async getPersonCampaignVariables(
     workspaceId: string,
   ): Promise<PersonCampaignVariables> {
-    const fields = await this.getPersonFields(workspaceId);
-    const definitions = listCampaignVariablesForFields(fields);
-    const knownVariableNames = new Set<string>([
-      ...definitions.map((definition) => definition.name),
-      ...COMPUTED_VARIABLE_NAMES,
-    ]);
+    return this.getPersonVariableSchema(workspaceId);
+  }
 
-    return { definitions, knownVariableNames };
+  private async getPersonVariableSchema(
+    workspaceId: string,
+  ): Promise<PersonVariableSchema> {
+    const { data, hashes } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMapsWithHashes(
+        { workspaceId, flatMapsKeys: [...PERSON_FIELD_CACHE_KEYS] },
+      );
+
+    const hash = PERSON_FIELD_CACHE_KEYS.map(
+      (cacheKey) => hashes[cacheKey] ?? '',
+    ).join(':');
+
+    const cached = readLruEntry({
+      map: this.schemaByWorkspaceId,
+      key: workspaceId,
+    });
+
+    if (cached?.hash === hash) {
+      return cached.schema;
+    }
+
+    const fields = this.extractPersonFields(data);
+    const definitions = listCampaignVariablesForFields(fields);
+    const schema: PersonVariableSchema = {
+      definitions,
+      knownVariableNames: new Set<string>([
+        ...definitions.map((definition) => definition.name),
+        ...COMPUTED_VARIABLE_NAMES,
+      ]),
+      fieldsByName: new Map(
+        fields.map((field) => [
+          field.name,
+          {
+            ...field,
+            options: resolveFlatFieldMetadataOptions({
+              flatFieldMetadata: field,
+              flatFieldMetadataOptionMaps: data.flatFieldMetadataOptionMaps,
+            }),
+          },
+        ]),
+      ),
+    };
+
+    writeLruEntry({
+      map: this.schemaByWorkspaceId,
+      key: workspaceId,
+      value: { hash, schema },
+      maxEntries: MAX_CACHED_WORKSPACE_SCHEMAS,
+    });
+
+    return schema;
   }
 
   async assertKnownVariables(
@@ -78,8 +146,8 @@ export class CampaignVariableService {
     workspaceId: string,
     person: PersonWorkspaceEntity | null,
   ): Promise<Record<string, string>> {
-    const { definitions } = await this.getPersonCampaignVariables(workspaceId);
-    const fieldsByName = await this.getPersonFieldsByName(workspaceId);
+    const { definitions, fieldsByName } =
+      await this.getPersonVariableSchema(workspaceId);
 
     const variables: Record<string, string> = {};
 
@@ -102,17 +170,13 @@ export class CampaignVariableService {
     return variables;
   }
 
-  private async getPersonFields(
-    workspaceId: string,
-  ): Promise<FlatFieldMetadata[]> {
-    const { flatObjectMetadataMaps, flatFieldMetadataMaps } =
-      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
-        {
-          workspaceId,
-          flatMapsKeys: ['flatObjectMetadataMaps', 'flatFieldMetadataMaps'],
-        },
-      );
-
+  private extractPersonFields({
+    flatObjectMetadataMaps,
+    flatFieldMetadataMaps,
+  }: {
+    flatObjectMetadataMaps: FlatObjectMetadataMaps;
+    flatFieldMetadataMaps: FlatFieldMetadataMaps;
+  }): FlatFieldMetadata[] {
     const personFlatObject =
       flatObjectMetadataMaps.byUniversalIdentifier[
         STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.person
@@ -126,14 +190,6 @@ export class CampaignVariableService {
       personFlatObject,
       flatFieldMetadataMaps,
     );
-  }
-
-  private async getPersonFieldsByName(
-    workspaceId: string,
-  ): Promise<Map<string, FlatFieldMetadata>> {
-    const fields = await this.getPersonFields(workspaceId);
-
-    return new Map(fields.map((field) => [field.name, field]));
   }
 
   private resolveValue(

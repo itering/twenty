@@ -5,7 +5,9 @@ import { ALL_METADATA_NAME } from 'twenty-shared/metadata';
 import { FileFolder } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
+import { APPLICATION_SOURCE_ENTRY_EXTENSIONS } from 'src/engine/core-modules/file-storage/constants/application-source-entry-extensions.constant';
 import { validateFilePath } from 'src/engine/core-modules/file-storage/utils/validate-file-path.util';
+import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { findFlatEntityByUniversalIdentifier } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-universal-identifier.util';
 import { HANDLER_NAME_REGEX } from 'src/engine/metadata-modules/logic-function/constants/handler.contant';
 import { LogicFunctionExecutionMode } from 'src/engine/metadata-modules/logic-function/logic-function.entity';
@@ -15,10 +17,12 @@ import { type FailedFlatEntityValidation } from 'src/engine/workspace-manager/wo
 import { getEmptyFlatEntityValidationError } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/builders/utils/get-flat-entity-validation-error.util';
 import { type FlatEntityUpdateValidationArgs } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/types/universal-flat-entity-update-validation-args.type';
 import { type UniversalFlatEntityValidationArgs } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/types/universal-flat-entity-validation-args.type';
+import { validateLogicFunctionForwardedRequestHeaders } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/utils/validate-logic-function-forwarded-request-headers.util';
+import { validateLogicFunctionServerRouteApplication } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/utils/validate-logic-function-server-route-application.util';
 
 @Injectable()
 export class FlatLogicFunctionValidatorService {
-  constructor() {}
+  constructor(private readonly twentyConfigService: TwentyConfigService) {}
 
   public validateFlatLogicFunctionUpdate({
     universalIdentifier,
@@ -26,6 +30,7 @@ export class FlatLogicFunctionValidatorService {
     optimisticFlatEntityMapsAndRelatedFlatEntityMaps: {
       flatLogicFunctionMaps: optimisticFlatLogicFunctionMaps,
     },
+    buildOptions,
   }: FlatEntityUpdateValidationArgs<
     typeof ALL_METADATA_NAME.logicFunction
   >): FailedFlatEntityValidation<'logicFunction', 'update'> {
@@ -71,6 +76,7 @@ export class FlatLogicFunctionValidatorService {
       const sourcePathResult = validateFilePath({
         resourcePath: flatEntityUpdate.sourceHandlerPath,
         fileFolder: FileFolder.Source,
+        allowedExtensions: APPLICATION_SOURCE_ENTRY_EXTENSIONS,
       });
 
       if (!sourcePathResult.isValid) {
@@ -92,6 +98,23 @@ export class FlatLogicFunctionValidatorService {
         userFriendlyMessage: msg`Handler name is invalid`,
       });
     }
+
+    validationResult.errors.push(
+      ...validateLogicFunctionForwardedRequestHeaders({
+        httpRouteTriggerSettings: flatEntityUpdate.httpRouteTriggerSettings,
+        serverRouteTriggerSettings: flatEntityUpdate.serverRouteTriggerSettings,
+        identityAssertionHeaderName: this.twentyConfigService.get(
+          'SERVER_ADMIN_IDENTITY_ASSERTION_HEADER',
+        ),
+      }),
+      ...validateLogicFunctionServerRouteApplication({
+        applicationUniversalIdentifier:
+          existingFlatLogicFunction.applicationUniversalIdentifier,
+        serverRouteTriggerSettings: flatEntityUpdate.serverRouteTriggerSettings,
+        workspaceCustomApplicationUniversalIdentifier:
+          buildOptions.workspaceCustomApplicationUniversalIdentifier,
+      }),
+    );
 
     const mergedPrebuiltState = {
       executionMode:
@@ -158,6 +181,7 @@ export class FlatLogicFunctionValidatorService {
     optimisticFlatEntityMapsAndRelatedFlatEntityMaps: {
       flatLogicFunctionMaps: optimisticFlatLogicFunctionMaps,
     },
+    buildOptions,
   }: UniversalFlatEntityValidationArgs<
     typeof ALL_METADATA_NAME.logicFunction
   >): FailedFlatEntityValidation<'logicFunction', 'create'> {
@@ -203,6 +227,7 @@ export class FlatLogicFunctionValidatorService {
       const sourcePathResult = validateFilePath({
         resourcePath: flatLogicFunctionToValidate.sourceHandlerPath,
         fileFolder: FileFolder.Source,
+        allowedExtensions: APPLICATION_SOURCE_ENTRY_EXTENSIONS,
       });
 
       if (!sourcePathResult.isValid) {
@@ -224,6 +249,26 @@ export class FlatLogicFunctionValidatorService {
         userFriendlyMessage: msg`Handler name is invalid`,
       });
     }
+
+    validationResult.errors.push(
+      ...validateLogicFunctionForwardedRequestHeaders({
+        httpRouteTriggerSettings:
+          flatLogicFunctionToValidate.httpRouteTriggerSettings,
+        serverRouteTriggerSettings:
+          flatLogicFunctionToValidate.serverRouteTriggerSettings,
+        identityAssertionHeaderName: this.twentyConfigService.get(
+          'SERVER_ADMIN_IDENTITY_ASSERTION_HEADER',
+        ),
+      }),
+      ...validateLogicFunctionServerRouteApplication({
+        applicationUniversalIdentifier:
+          flatLogicFunctionToValidate.applicationUniversalIdentifier,
+        serverRouteTriggerSettings:
+          flatLogicFunctionToValidate.serverRouteTriggerSettings,
+        workspaceCustomApplicationUniversalIdentifier:
+          buildOptions.workspaceCustomApplicationUniversalIdentifier,
+      }),
+    );
 
     if (
       flatLogicFunctionToValidate.executionMode ===

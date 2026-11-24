@@ -1,0 +1,182 @@
+import { relative } from 'path';
+import {
+  type Manifest,
+  OUTPUT_DIR,
+  type SourceFileManifest,
+} from 'twenty-shared/application';
+import { FileFolder } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
+
+import type { EntityFilePaths } from '@/app/manifest/types/entity-file-paths.type';
+
+export type ManifestBuildResult = {
+  manifest: Manifest | null;
+  filePaths: EntityFilePaths;
+  error?: string;
+};
+
+export type UpdateManifestChecksumParams = {
+  outputDir?: string;
+  frontComponentSourcePaths?: Map<string, string[]>;
+  logicFunctionSourcePaths?: Map<string, string[]>;
+  manifest: Manifest;
+  builtFileInfos: Map<
+    string,
+    {
+      checksum: string;
+      builtPath: string;
+      fileFolder: FileFolder;
+      usesSdkClient?: boolean;
+    }
+  >;
+};
+
+export const manifestUpdateChecksums = ({
+  manifest,
+  builtFileInfos,
+  outputDir = OUTPUT_DIR,
+  frontComponentSourcePaths,
+  logicFunctionSourcePaths,
+}: UpdateManifestChecksumParams): Manifest => {
+  const sourceFiles: SourceFileManifest[] = [];
+  let result = { ...structuredClone(manifest), sourceFiles };
+  for (const {
+    builtPath,
+    fileFolder,
+    checksum,
+    usesSdkClient,
+  } of builtFileInfos.values()) {
+    const rootBuiltPath = relative(outputDir, builtPath);
+    if (fileFolder === FileFolder.Source) {
+      result.sourceFiles.push({
+        filePath: rootBuiltPath.replaceAll('\\', '/'),
+        checksum,
+      });
+    }
+    if (fileFolder === FileFolder.BuiltLogicFunction) {
+      const logicFunctions = result.logicFunctions;
+      const fnIndex = logicFunctions.findIndex(
+        (f) => f.builtHandlerPath === rootBuiltPath,
+      );
+      if (fnIndex === -1) {
+        continue;
+      }
+      result = {
+        ...result,
+        logicFunctions: logicFunctions.map((fn, index) =>
+          index === fnIndex ? { ...fn, builtHandlerChecksum: checksum } : fn,
+        ),
+      };
+    }
+
+    if (fileFolder === FileFolder.PublicAsset) {
+      const assets = result.publicAssets;
+      const assetIndex = assets.findIndex((a) => a.filePath === rootBuiltPath);
+      if (assetIndex === -1) {
+        continue;
+      }
+      result = {
+        ...result,
+        publicAssets: assets.map((asset, index) =>
+          index === assetIndex ? { ...asset, checksum } : asset,
+        ),
+      };
+      continue;
+    }
+
+    if (fileFolder === FileFolder.BuiltFrontComponent) {
+      const sharedDependencies =
+        result.application.frontComponentSharedDependencies;
+
+      if (
+        isDefined(sharedDependencies) &&
+        sharedDependencies.builtPath === rootBuiltPath
+      ) {
+        result = {
+          ...result,
+          application: {
+            ...result.application,
+            frontComponentSharedDependencies: {
+              ...sharedDependencies,
+              builtChecksum: checksum,
+            },
+          },
+        };
+        continue;
+      }
+
+      const frontComponents = result.frontComponents;
+      const componentIndex =
+        frontComponents.findIndex(
+          (c) => c.builtComponentPath === rootBuiltPath,
+        ) ?? -1;
+      if (componentIndex === -1) {
+        continue;
+      }
+
+      result = {
+        ...result,
+        frontComponents: frontComponents.map((component, index) =>
+          index === componentIndex
+            ? {
+                ...component,
+                builtComponentChecksum: checksum,
+                usesSdkClient: usesSdkClient ?? false,
+              }
+            : component,
+        ),
+      };
+    }
+
+    if (fileFolder === FileFolder.Dependencies) {
+      if (rootBuiltPath === 'package.json') {
+        result.application.packageJsonChecksum = checksum;
+      }
+
+      if (rootBuiltPath === 'yarn.lock') {
+        result.application.yarnLockChecksum = checksum;
+      }
+    }
+  }
+
+  result.sourceFiles.sort((first, second) =>
+    first.filePath.localeCompare(second.filePath),
+  );
+
+  const withSourceFiles = <
+    TDefinition extends { sourceFiles?: SourceFileManifest[] },
+  >({
+    definition,
+    paths,
+  }: {
+    definition: TDefinition;
+    paths?: string[];
+  }): TDefinition & { sourceFiles?: SourceFileManifest[] } => {
+    if (!isDefined(paths)) {
+      return definition;
+    }
+
+    return {
+      ...definition,
+      sourceFiles: result.sourceFiles.filter(
+        (file) =>
+          paths.includes(file.filePath) &&
+          !['package.json', 'yarn.lock'].includes(file.filePath),
+      ),
+    };
+  };
+
+  result.frontComponents = result.frontComponents.map((component) =>
+    withSourceFiles({
+      definition: component,
+      paths: frontComponentSourcePaths?.get(component.sourceComponentPath),
+    }),
+  );
+  result.logicFunctions = result.logicFunctions.map((logicFunction) =>
+    withSourceFiles({
+      definition: logicFunction,
+      paths: logicFunctionSourcePaths?.get(logicFunction.sourceHandlerPath),
+    }),
+  );
+  return result;
+};

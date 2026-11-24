@@ -74,8 +74,7 @@ export const useSaveRecordTableWidgetViews = () => {
           continue;
         }
 
-        // Every view-backed widget gets a draft seeded on entering edit mode;
-        // only the ones the user actually touched need an upsert.
+        // Every view-backed widget gets a draft on entering edit mode; only touched ones need an upsert.
         if (
           isDeeplyEqual(
             recordTableWidgetViewPersisted[widget.id],
@@ -133,21 +132,21 @@ export const useSaveRecordTableWidgetViews = () => {
                 fieldMetadataId: filter.fieldMetadataId,
                 operand: filter.operand,
                 value: filter.value,
-                viewFilterGroupId: filter.viewFilterGroupId ?? undefined,
+                viewFilterGroupId: filter.viewFilterGroupId ?? null,
                 positionInViewFilterGroup:
-                  filter.positionInViewFilterGroup ?? undefined,
-                subFieldName: filter.subFieldName ?? undefined,
+                  filter.positionInViewFilterGroup ?? null,
+                subFieldName: filter.subFieldName ?? null,
                 relationTargetFieldMetadataId:
-                  filter.relationTargetFieldMetadataId ?? undefined,
+                  filter.relationTargetFieldMetadataId ?? null,
               })),
               viewFilterGroups: widgetViewDraft.viewFilterGroups.map(
                 (group) => ({
                   id: group.id,
                   parentViewFilterGroupId:
-                    group.parentViewFilterGroupId ?? undefined,
+                    group.parentViewFilterGroupId ?? null,
                   logicalOperator: group.logicalOperator,
                   positionInViewFilterGroup:
-                    group.positionInViewFilterGroup ?? undefined,
+                    group.positionInViewFilterGroup ?? null,
                 }),
               ),
               viewSorts: widgetViewDraft.viewSorts.map((sort) => ({
@@ -159,10 +158,7 @@ export const useSaveRecordTableWidgetViews = () => {
           },
         });
 
-        // View groups are not part of the upsert input: the server
-        // regenerates them from mainGroupByFieldMetadataId. Store the
-        // server rows instead of the locally generated draft groups so
-        // the persisted snapshot never claims client-side ids were saved.
+        // The server regenerates view groups from mainGroupByFieldMetadataId, so store its rows, not draft ids.
         const upsertedViewGroups = data?.upsertViewWidget.viewGroups;
 
         normalizedRecordTableWidgetViewDraft = {

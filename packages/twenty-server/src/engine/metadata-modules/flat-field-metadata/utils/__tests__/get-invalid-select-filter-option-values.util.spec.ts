@@ -23,7 +23,7 @@ describe('getInvalidSelectFilterOptionValues', () => {
   it('returns invalid values for a SELECT field when an option does not exist', () => {
     expect(
       getInvalidSelectFilterOptionValues({
-        fieldMetadata: selectField,
+        options: selectField.options,
         operand: ViewFilterOperand.IS,
         value: ['WON', 'NOT_A_REAL_OPTION'],
       }),
@@ -33,7 +33,7 @@ describe('getInvalidSelectFilterOptionValues', () => {
   it('returns an empty array when all SELECT values are valid options', () => {
     expect(
       getInvalidSelectFilterOptionValues({
-        fieldMetadata: selectField,
+        options: selectField.options,
         operand: ViewFilterOperand.IS,
         value: ['WON', 'LOST'],
       }),
@@ -43,7 +43,7 @@ describe('getInvalidSelectFilterOptionValues', () => {
   it('supports a plain string array value', () => {
     expect(
       getInvalidSelectFilterOptionValues({
-        fieldMetadata: selectField,
+        options: selectField.options,
         operand: ViewFilterOperand.IS,
         value: ['NOPE'],
       }),
@@ -53,7 +53,7 @@ describe('getInvalidSelectFilterOptionValues', () => {
   it('parses a JSON-stringified array value (chart filter format)', () => {
     expect(
       getInvalidSelectFilterOptionValues({
-        fieldMetadata: selectField,
+        options: selectField.options,
         operand: ViewFilterOperand.IS,
         value: '["WON"]',
       }),
@@ -63,27 +63,17 @@ describe('getInvalidSelectFilterOptionValues', () => {
   it('parses a JSON-stringified multi-value array and reports invalid options', () => {
     expect(
       getInvalidSelectFilterOptionValues({
-        fieldMetadata: selectField,
+        options: selectField.options,
         operand: ViewFilterOperand.IS,
         value: '["WON","NOPE"]',
       }),
     ).toEqual(['NOPE']);
   });
 
-  it('treats a non-JSON plain string as a single option value', () => {
-    expect(
-      getInvalidSelectFilterOptionValues({
-        fieldMetadata: selectField,
-        operand: ViewFilterOperand.IS,
-        value: 'WON',
-      }),
-    ).toEqual([]);
-  });
-
   it('ignores value-less operands like IS_EMPTY', () => {
     expect(
       getInvalidSelectFilterOptionValues({
-        fieldMetadata: selectField,
+        options: selectField.options,
         operand: ViewFilterOperand.IS_EMPTY,
         value: '',
       }),
@@ -93,7 +83,7 @@ describe('getInvalidSelectFilterOptionValues', () => {
   it('ignores subfield filters', () => {
     expect(
       getInvalidSelectFilterOptionValues({
-        fieldMetadata: selectField,
+        options: selectField.options,
         operand: ViewFilterOperand.IS,
         subFieldName: 'someSubField',
         value: JSON.stringify(['NOPE']),

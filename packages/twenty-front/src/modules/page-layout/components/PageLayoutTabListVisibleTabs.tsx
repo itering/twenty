@@ -1,14 +1,18 @@
 import { styled } from '@linaria/react';
-import { TabButton } from 'twenty-ui/input';
+import { TabListRow } from '@/ui/layout/tab-list/components/TabListRow';
+import { TabListItem } from '@/ui/layout/tab-list/components/TabListItem';
 
-import { TAB_LIST_GAP } from '@/ui/layout/tab-list/constants/TabListGap';
+import { useScrollActiveTabIntoView } from '@/ui/layout/tab-list/hooks/useScrollActiveTabIntoView';
 import { type SingleTabProps } from '@/ui/layout/tab-list/types/SingleTabProps';
 
 import { PAGE_LAYOUT_TAB_LIST_DROPPABLE_IDS } from '@/page-layout/components/PageLayoutTabListDroppableIds';
 import { PageLayoutTabListReorderableTab } from '@/page-layout/components/PageLayoutTabListReorderableTab';
+import { usePrerenderPageLayoutTabOnHover } from '@/page-layout/hooks/usePrerenderPageLayoutTabOnHover';
+import { type PageLayoutWidget } from '@/page-layout/types/PageLayoutWidget';
 import { DragDropItemDropTarget } from '@/ui/utilities/drag-and-drop/components/DragDropItemDropTarget';
 
 type PageLayoutTabListVisibleTabsProps = {
+  'aria-label': string;
   visibleTabs: SingleTabProps[];
   visibleTabCount: number;
   activeTabId: string | null;
@@ -17,20 +21,10 @@ type PageLayoutTabListVisibleTabsProps = {
   onChangeTab?: (tabId: string) => void;
   onSelectTab: (tabId: string) => void;
   canReorder: boolean;
-  widgetDropTargetTabIds: Set<string>;
+  widgetDropTargetWidgetsByTabId: Map<string, PageLayoutWidget[]>;
   firstHiddenTabId: string | null;
+  isScrollable: boolean;
 };
-
-const StyledTabContainer = styled.div`
-  display: flex;
-  max-width: 100%;
-  overflow: hidden;
-  position: relative;
-
-  > *:not(:last-child) {
-    margin-right: ${TAB_LIST_GAP}px;
-  }
-`;
 
 const StyledTabSlot = styled.div`
   display: flex;
@@ -43,6 +37,7 @@ const StyledLeadingDropTarget = styled.div`
 `;
 
 export const PageLayoutTabListVisibleTabs = ({
+  'aria-label': ariaLabel,
   visibleTabs,
   visibleTabCount,
   activeTabId,
@@ -51,14 +46,28 @@ export const PageLayoutTabListVisibleTabs = ({
   onChangeTab,
   onSelectTab,
   canReorder,
-  widgetDropTargetTabIds,
+  widgetDropTargetWidgetsByTabId,
   firstHiddenTabId,
+  isScrollable,
 }: PageLayoutTabListVisibleTabsProps) => {
+  const { tabRowRef } = useScrollActiveTabIntoView({
+    activeTabId,
+    isScrollable,
+  });
+
+  const { handleTabMouseEnter, handleTabMouseLeave } =
+    usePrerenderPageLayoutTabOnHover();
+
   if (canReorder) {
     const shownTabs = visibleTabs.slice(0, visibleTabCount);
 
     return (
-      <StyledTabContainer>
+      <TabListRow
+        aria-label={ariaLabel}
+        ref={tabRowRef}
+        behaveAsLinks={false}
+        isScrollable={isScrollable}
+      >
         {shownTabs.map((tab, index) => (
           <StyledTabSlot key={tab.id}>
             <StyledLeadingDropTarget>
@@ -76,7 +85,9 @@ export const PageLayoutTabListVisibleTabs = ({
               nextTabId={shownTabs[index + 1]?.id ?? firstHiddenTabId}
               isActive={tab.id === activeTabId}
               disabled={tab.disabled ?? loading}
-              isWidgetDropTarget={widgetDropTargetTabIds.has(tab.id)}
+              widgetDropTargetWidgets={widgetDropTargetWidgetsByTabId.get(
+                tab.id,
+              )}
               onSelect={() => onSelectTab(tab.id)}
             />
           </StyledTabSlot>
@@ -89,30 +100,33 @@ export const PageLayoutTabListVisibleTabs = ({
             compact
           />
         </StyledLeadingDropTarget>
-      </StyledTabContainer>
+      </TabListRow>
     );
   }
 
   return (
-    <StyledTabContainer>
+    <TabListRow
+      aria-label={ariaLabel}
+      ref={tabRowRef}
+      behaveAsLinks={behaveAsLinks}
+      isScrollable={isScrollable}
+    >
       {visibleTabs.slice(0, visibleTabCount).map((tab) => (
-        <TabButton
+        <TabListItem
           key={tab.id}
-          id={tab.id}
-          title={tab.title}
-          LeftIcon={tab.Icon}
-          logo={tab.logo}
+          tab={tab}
+          mode={behaveAsLinks ? 'link' : 'tab'}
           active={tab.id === activeTabId}
           disabled={tab.disabled ?? loading}
-          pill={tab.pill}
-          to={behaveAsLinks ? `#${tab.id}` : undefined}
-          onClick={
-            behaveAsLinks
-              ? () => onChangeTab?.(tab.id)
-              : () => onSelectTab(tab.id)
+          onSelect={behaveAsLinks ? onChangeTab : onSelectTab}
+          onMouseEnter={
+            tab.id === activeTabId || (tab.disabled ?? loading)
+              ? undefined
+              : () => handleTabMouseEnter(tab.id)
           }
+          onMouseLeave={handleTabMouseLeave}
         />
       ))}
-    </StyledTabContainer>
+    </TabListRow>
   );
 };

@@ -1,5 +1,5 @@
 import { type WorkflowHttpRequestAction } from '@/workflow/types/Workflow';
-import { parseAndValidateVariableFriendlyStringifiedJson } from '@/workflow/utils/parseAndValidateVariableFriendlyStringifiedJson';
+import { parseAndValidateVariableFriendlyStringifiedJson } from '~/utils/parseAndValidateVariableFriendlyStringifiedJson';
 import { convertOutputSchemaToJson } from '@/workflow/workflow-steps/workflow-actions/http-request-action/utils/convertOutputSchemaToJson';
 import { getHttpRequestOutputSchema } from '@/workflow/workflow-steps/workflow-actions/http-request-action/utils/getHttpRequestOutputSchema';
 import { isNonEmptyString } from '@sniptt/guards';
@@ -50,7 +50,7 @@ export const useHttpRequestOutputSchema = ({
   const [error, setError] = useState<string | undefined>();
 
   const handleOutputSchemaChange = (value: string | null) => {
-    if (readonly === true) {
+    if (readonly) {
       return;
     }
 

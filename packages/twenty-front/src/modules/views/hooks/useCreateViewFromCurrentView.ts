@@ -6,27 +6,29 @@ import { useRecordIndexContextOrThrow } from '@/object-record/record-index/conte
 import { currentRecordSortsComponentState } from '@/object-record/record-sort/states/currentRecordSortsComponentState';
 import { useAtomComponentStateCallbackState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateCallbackState';
 import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
-import { usePerformViewAPIPersist } from '@/views/hooks/internal/usePerformViewAPIPersist';
-import { usePerformViewFieldAPIPersist } from '@/views/hooks/internal/usePerformViewFieldAPIPersist';
-import { usePerformViewFilterAPIPersist } from '@/views/hooks/internal/usePerformViewFilterAPIPersist';
-import { usePerformViewFilterGroupAPIPersist } from '@/views/hooks/internal/usePerformViewFilterGroupAPIPersist';
-import { usePerformViewSortAPIPersist } from '@/views/hooks/internal/usePerformViewSortAPIPersist';
+import { usePerformViewApiPersist } from '@/views/hooks/internal/usePerformViewApiPersist';
+import { usePerformViewFieldApiPersist } from '@/views/hooks/internal/usePerformViewFieldApiPersist';
+import { usePerformViewFilterApiPersist } from '@/views/hooks/internal/usePerformViewFilterApiPersist';
+import { usePerformViewFilterGroupApiPersist } from '@/views/hooks/internal/usePerformViewFilterGroupApiPersist';
+import { usePerformViewSortApiPersist } from '@/views/hooks/internal/usePerformViewSortApiPersist';
 import { viewFromViewIdFamilySelector } from '@/views/states/selectors/viewFromViewIdFamilySelector';
 import { type GraphQLView } from '@/views/types/GraphQLView';
 import { ViewType } from '@/views/types/ViewType';
+import { isRecordFieldSupportedByViewType } from '@/object-record/record-field/utils/isRecordFieldSupportedByViewType';
 import { duplicateViewFiltersAndViewFilterGroups } from '@/views/utils/duplicateViewFiltersAndViewFilterGroups';
 import { mapRecordFilterGroupToViewFilterGroup } from '@/views/utils/mapRecordFilterGroupToViewFilterGroup';
 import { mapRecordFilterToViewFilter } from '@/views/utils/mapRecordFilterToViewFilter';
 import { mapRecordSortToViewSort } from '@/views/utils/mapRecordSortToViewSort';
+import { mapViewSortToCreateViewSortMutationVariables } from '@/views/utils/mapViewSortToCreateViewSortMutationVariables';
 import { useStore } from 'jotai';
 import { useCallback } from 'react';
 import { isDefined } from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
 import { v4 } from 'uuid';
 import { ViewCalendarLayout } from '~/generated-metadata/graphql';
-import { isUndefinedOrNull } from '~/utils/isUndefinedOrNull';
 
 export const useCreateViewFromCurrentView = (viewBarComponentId?: string) => {
-  const { performViewAPICreate } = usePerformViewAPIPersist();
+  const { performViewApiCreate } = usePerformViewApiPersist();
 
   const { objectMetadataItem, recordIndexId } = useRecordIndexContextOrThrow();
 
@@ -40,14 +42,14 @@ export const useCreateViewFromCurrentView = (viewBarComponentId?: string) => {
     recordIndexId,
   );
 
-  const { performViewFieldAPICreate } = usePerformViewFieldAPIPersist();
+  const { performViewFieldApiCreate } = usePerformViewFieldApiPersist();
 
-  const { performViewSortAPICreate } = usePerformViewSortAPIPersist();
+  const { performViewSortApiCreate } = usePerformViewSortApiPersist();
 
-  const { performViewFilterAPICreate } = usePerformViewFilterAPIPersist();
+  const { performViewFilterApiCreate } = usePerformViewFilterApiPersist();
 
-  const { performViewFilterGroupAPICreate } =
-    usePerformViewFilterGroupAPIPersist();
+  const { performViewFilterGroupApiCreate } =
+    usePerformViewFilterGroupApiPersist();
 
   const store = useStore();
 
@@ -110,7 +112,7 @@ export const useCreateViewFromCurrentView = (viewBarComponentId?: string) => {
 
       const viewType = type ?? sourceView.type;
 
-      const result = await performViewAPICreate(
+      const result = await performViewApiCreate(
         {
           input: {
             id: id ?? v4(),
@@ -127,12 +129,18 @@ export const useCreateViewFromCurrentView = (viewBarComponentId?: string) => {
             kanbanColumnWidth: shouldCopyFiltersAndSortsAndAggregate
               ? sourceView.kanbanColumnWidth
               : undefined,
+            // Follows the group-by it paces rather than being copied on its own
+            groupLoadLimit: shouldCopyFiltersAndSortsAndAggregate
+              ? sourceView.groupLoadLimit
+              : undefined,
+            shouldDisplayGroupsAsTabs: shouldCopyFiltersAndSortsAndAggregate
+              ? (sourceView.shouldDisplayGroupsAsTabs ?? undefined)
+              : undefined,
             mainGroupByFieldMetadataId: shouldCopyFiltersAndSortsAndAggregate
               ? sourceView.mainGroupByFieldMetadataId
               : mainGroupByFieldMetadataId,
             type: viewType,
             objectMetadataId: sourceView.objectMetadataId,
-            openRecordIn: sourceView.openRecordIn,
             anyFieldFilterValue: anyFieldFilterValue,
             calendarLayout:
               viewType === ViewType.CALENDAR
@@ -158,21 +166,31 @@ export const useCreateViewFromCurrentView = (viewBarComponentId?: string) => {
 
       const newViewId = result.response.data?.createView.id;
 
-      if (isUndefinedOrNull(newViewId)) {
-        throw new Error('Failed to create view');
+      if (!isDefined(newViewId)) {
+        throw new Error(doNotTranslate('Failed to create view'));
       }
 
-      const fieldResult = await performViewFieldAPICreate({
-        inputs: sourceView.viewFields.map((viewField) => ({
-          id: v4(),
-          fieldMetadataId: viewField.fieldMetadataId,
-          position: viewField.position,
-          isVisible: viewField.isVisible,
-          size: viewField.size,
-          aggregateOperation: viewField.aggregateOperation,
-          viewFieldGroupId: viewField.viewFieldGroupId,
-          viewId: newViewId,
-        })),
+      const fieldResult = await performViewFieldApiCreate({
+        inputs: sourceView.viewFields
+          .filter((viewField) =>
+            isRecordFieldSupportedByViewType({
+              recordField: viewField,
+              viewType,
+            }),
+          )
+          .map((viewField) => ({
+            id: v4(),
+            fieldMetadataId: viewField.fieldMetadataId,
+            position: viewField.position,
+            isVisible: viewField.isVisible,
+            isCanonical: viewField.isCanonical,
+            size: viewField.size,
+            aggregateOperation: viewField.aggregateOperation,
+            viewFieldGroupId: viewField.viewFieldGroupId,
+            relationTargetFieldMetadataId:
+              viewField.relationTargetFieldMetadataId,
+            viewId: newViewId,
+          })),
       });
 
       if (fieldResult.status === 'failed') {
@@ -207,7 +225,7 @@ export const useCreateViewFromCurrentView = (viewBarComponentId?: string) => {
             id: v4(),
           }));
 
-        const filterGroupResult = await performViewFilterGroupAPICreate(
+        const filterGroupResult = await performViewFilterGroupApiCreate(
           viewFilterGroupsToCreate,
           {
             id: newViewId,
@@ -235,7 +253,7 @@ export const useCreateViewFromCurrentView = (viewBarComponentId?: string) => {
           }),
         );
 
-        const filterResult = await performViewFilterAPICreate(
+        const filterResult = await performViewFilterApiCreate(
           createViewFilterInputs,
         );
 
@@ -243,16 +261,14 @@ export const useCreateViewFromCurrentView = (viewBarComponentId?: string) => {
           return undefined;
         }
 
-        const createViewSortInputs = viewSortsToCreate.map((viewSort) => ({
-          input: {
-            id: viewSort.id,
-            fieldMetadataId: viewSort.fieldMetadataId,
+        const createViewSortInputs = viewSortsToCreate.map((viewSort) =>
+          mapViewSortToCreateViewSortMutationVariables({
+            viewSort,
             viewId: newViewId,
-            direction: viewSort.direction,
-          },
-        }));
+          }),
+        );
 
-        const sortResult = await performViewSortAPICreate(createViewSortInputs);
+        const sortResult = await performViewSortApiCreate(createViewSortInputs);
 
         if (sortResult.status === 'failed') {
           return undefined;
@@ -263,17 +279,17 @@ export const useCreateViewFromCurrentView = (viewBarComponentId?: string) => {
     },
     [
       currentViewId,
-      performViewAPICreate,
+      performViewApiCreate,
       anyFieldFilterValue,
       objectMetadataItem,
-      performViewFieldAPICreate,
+      performViewFieldApiCreate,
       store,
       currentRecordFilterGroups,
       currentRecordFilters,
       currentRecordSorts,
-      performViewFilterGroupAPICreate,
-      performViewFilterAPICreate,
-      performViewSortAPICreate,
+      performViewFilterGroupApiCreate,
+      performViewFilterApiCreate,
+      performViewSortApiCreate,
     ],
   );
 

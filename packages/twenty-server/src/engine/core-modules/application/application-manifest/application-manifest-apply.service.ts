@@ -1,14 +1,18 @@
 import { Injectable } from '@nestjs/common';
 
-import { type Manifest } from 'twenty-shared/application';
+import {
+  getDeclaredLegacyRoleRecordsPermissionsKeys,
+  type Manifest,
+} from 'twenty-shared/application';
 import { isDefined } from 'twenty-shared/utils';
 
+import { ApplicationGrantRoleService } from 'src/engine/core-modules/application/application-grant-role/services/application-grant-role.service';
 import { ApplicationSyncService } from 'src/engine/core-modules/application/application-manifest/application-sync.service';
 import { ApplicationRegistrationService } from 'src/engine/core-modules/application/application-registration/application-registration.service';
 import { ApplicationRegistrationSourceType } from 'src/engine/core-modules/application/application-registration/enums/application-registration-source-type.enum';
 import { type ApplicationEntity } from 'src/engine/core-modules/application/application.entity';
 import { SdkClientGenerationService } from 'src/engine/core-modules/sdk-client/sdk-client-generation.service';
-import { type WorkspaceMigration } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/types/workspace-migration.type';
+import { type ApplicationManifestSyncResult } from 'src/engine/core-modules/application/application-manifest/types/application-manifest-sync-result.type';
 
 // Shared by marketplace/tarball installs and CLI dev sync so every source
 // applies a manifest through the same steps with the same guards.
@@ -18,6 +22,7 @@ export class ApplicationManifestApplyService {
     private readonly applicationSyncService: ApplicationSyncService,
     private readonly sdkClientGenerationService: SdkClientGenerationService,
     private readonly applicationRegistrationService: ApplicationRegistrationService,
+    private readonly applicationGrantRoleService: ApplicationGrantRoleService,
   ) {}
 
   async applyManifestToWorkspace({
@@ -25,28 +30,61 @@ export class ApplicationManifestApplyService {
     manifest,
     applicationRegistrationId,
     application,
+    forceSdkClientGeneration = false,
+    inferDeletionFromMissingEntities = true,
+    persistVersion,
+    shouldDeferActions,
   }: {
     workspaceId: string;
     manifest: Manifest;
     applicationRegistrationId?: string;
-    application: ApplicationEntity;
-  }): Promise<{
-    workspaceMigration: WorkspaceMigration;
-    hasSchemaMetadataChanged: boolean;
-  }> {
+    application: Pick<
+      ApplicationEntity,
+      'id' | 'universalIdentifier' | 'version'
+    >;
+    inferDeletionFromMissingEntities?: boolean;
+    // Installs and upgrades force regeneration so function-only upgrades pick
+    // up SDK-level changes; dev sync relies on first-apply/schema-change to
+    // avoid regenerating on every save.
+    forceSdkClientGeneration?: boolean;
+    persistVersion?: boolean;
+    shouldDeferActions?: boolean;
+  }): Promise<ApplicationManifestSyncResult> {
     // The application version is only persisted by a successful sync: no
     // version means no sync ever completed, so the SDK client must be
     // generated regardless of schema changes.
     const isFirstApply = !isDefined(application.version);
 
-    const { workspaceMigration, hasSchemaMetadataChanged } =
-      await this.applicationSyncService.synchronizeFromManifest({
-        workspaceId,
-        manifest,
-        applicationRegistrationId,
-      });
+    const {
+      workspaceMigration,
+      hasSchemaMetadataChanged,
+      cascadeDeletionParentByUniversalIdentifier,
+    } = await this.applicationSyncService.synchronizeFromManifest({
+      workspaceId,
+      manifest,
+      applicationRegistrationId,
+      inferDeletionFromMissingEntities,
+      persistVersion,
+      shouldDeferActions,
+    });
 
-    if (isFirstApply || hasSchemaMetadataChanged) {
+    const requestedRole = manifest.roles.find(
+      (role) =>
+        role.universalIdentifier ===
+        manifest.application.defaultRoleUniversalIdentifier,
+    );
+
+    await this.applicationGrantRoleService.upsertGrantRole({
+      workspaceId,
+      applicationId: application.id,
+      // A partial sync can leave the default role out: it then keeps the legacy treatment
+      isRequestedRoleDeclaredWithLegacyProperties:
+        !isDefined(requestedRole) ||
+        getDeclaredLegacyRoleRecordsPermissionsKeys({ role: requestedRole })
+          .length > 0,
+    });
+
+    if (forceSdkClientGeneration || isFirstApply || hasSchemaMetadataChanged) {
       await this.sdkClientGenerationService.generateSdkClientForApplication({
         workspaceId,
         applicationId: application.id,
@@ -55,7 +93,11 @@ export class ApplicationManifestApplyService {
       });
     }
 
-    return { workspaceMigration, hasSchemaMetadataChanged };
+    return {
+      workspaceMigration,
+      hasSchemaMetadataChanged,
+      cascadeDeletionParentByUniversalIdentifier,
+    };
   }
 
   async refreshRegistrationFromManifest({
@@ -92,12 +134,15 @@ export class ApplicationManifestApplyService {
       }
     }
 
-    return this.applicationRegistrationService.updateFromManifest({
-      applicationRegistrationId,
-      manifest,
-      sourceType,
-      latestAvailableVersion,
-      preventVersionDowngrade,
-    });
+    const manifestUpdate =
+      await this.applicationRegistrationService.updateFromManifest({
+        applicationRegistrationId,
+        manifest,
+        sourceType,
+        latestAvailableVersion,
+        preventVersionDowngrade,
+      });
+
+    return isDefined(manifestUpdate);
   }
 }

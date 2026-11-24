@@ -5,6 +5,9 @@ const LIST_PLANS_QUERY = `
   query listPlans {
     listPlans {
       planKey
+      isSellable
+      upgradePlanKeys
+      downgradePlanKeys
       licensedProducts {
         name
         description
@@ -12,36 +15,12 @@ const LIST_PLANS_QUERY = `
         metadata {
           productKey
           planKey
-          priceUsageBased
         }
         ... on BillingLicensedProduct {
           prices {
             stripePriceId
             unitAmount
             recurringInterval
-            priceUsageType
-          }
-        }
-      }
-      meteredProducts {
-        name
-        description
-        images
-        metadata {
-          productKey
-          planKey
-          priceUsageBased
-        }
-        ... on BillingMeteredProduct {
-          prices {
-            priceUsageType
-            recurringInterval
-            stripePriceId
-            tiers {
-              flatAmount
-              unitAmount
-              upTo
-            }
           }
         }
       }

@@ -22,11 +22,10 @@ export class MarketplacePublicResolver {
 
   @Query(() => [MarketplaceAppDTO], { name: 'publicMarketplaceApps' })
   @UseGuards(PublicEndpointGuard, NoPermissionGuard)
-  async findManyPublicMarketplaceApps(
-    @Args('isVetted', { type: () => Boolean, defaultValue: true })
-    isVetted: boolean,
-  ): Promise<MarketplaceAppDTO[]> {
-    return this.marketplaceQueryService.findManyMarketplaceApps({ isVetted });
+  async findManyPublicMarketplaceApps(): Promise<MarketplaceAppDTO[]> {
+    return this.marketplaceQueryService.findManyMarketplaceApps({
+      isListed: true,
+    });
   }
 
   @Query(() => MarketplaceAppDetailDTO, { name: 'publicMarketplaceAppDetail' })
@@ -34,10 +33,9 @@ export class MarketplacePublicResolver {
   async findPublicMarketplaceAppDetail(
     @Args('universalIdentifier') universalIdentifier: string,
   ): Promise<MarketplaceAppDetailDTO> {
-    const detail =
-      await this.marketplaceQueryService.findMarketplaceAppDetail(
-        universalIdentifier,
-      );
+    const detail = await this.marketplaceQueryService.findMarketplaceAppDetail({
+      universalIdentifier,
+    });
 
     if (!detail.isListed) {
       throw new ApplicationRegistrationException(

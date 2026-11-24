@@ -1,7 +1,8 @@
 import { useCallback, useEffect } from 'react';
 
 import { checkIfItsAViteStaleChunkLazyLoadingError } from '@/error-handler/utils/checkIfItsAViteStaleChunkLazyLoadingError';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
+import { getToastOptionsFromError } from '@/error-handler/utils/getToastOptionsFromError';
+import { isMonacoCancellationError } from '@/error-handler/utils/isMonacoCancellationError';
 import {
   CombinedGraphQLErrors,
   CombinedProtocolErrors,
@@ -12,6 +13,7 @@ import {
   UnconventionalError,
 } from '@apollo/client/errors';
 import { isDefined, type CustomError } from 'twenty-shared/utils';
+import { useToast } from 'twenty-ui/components/feedback';
 
 const isApolloError = (error: unknown): boolean =>
   CombinedGraphQLErrors.is(error) ||
@@ -29,30 +31,33 @@ const hasErrorCode = (
 };
 
 export const PromiseRejectionEffect = () => {
-  const { enqueueErrorSnackBar } = useSnackBar();
+  const { enqueueToast } = useToast();
 
   const handlePromiseRejection = useCallback(
     async (event: PromiseRejectionEvent) => {
       const error = event.reason;
+
+      if (error instanceof Error && isMonacoCancellationError(error)) {
+        return;
+      }
+
       if (isApolloError(error)) {
-        enqueueErrorSnackBar({
-          apolloError: error,
-        });
+        enqueueToast(getToastOptionsFromError({ error }));
         return; // already handled by apolloLink
       }
 
       const isAbortError =
         error?.networkError?.name === 'AbortError' ||
-        error?.name === 'AbortError';
+        error?.name === 'AbortError' ||
+        (error instanceof TypeError &&
+          error.message.toLowerCase() === 'cancelled');
 
       const isViteStaleChunkLazyLoadingError =
         error instanceof Error &&
         checkIfItsAViteStaleChunkLazyLoadingError(error);
 
       if (!isAbortError && !isViteStaleChunkLazyLoadingError) {
-        enqueueErrorSnackBar(
-          error instanceof Error ? { message: error.message } : {},
-        );
+        enqueueToast(getToastOptionsFromError({ error }));
       }
 
       try {
@@ -70,7 +75,7 @@ export const PromiseRejectionEffect = () => {
         console.error('Failed to capture exception with Sentry:', sentryError);
       }
     },
-    [enqueueErrorSnackBar],
+    [enqueueToast],
   );
 
   useEffect(() => {

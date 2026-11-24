@@ -3,6 +3,7 @@
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 
+import { isNonEmptyString } from '@sniptt/guards';
 import { type Request } from 'express';
 import { Strategy, type StrategyOptions, type TokenSet } from 'openid-client';
 
@@ -11,7 +12,7 @@ import {
   AuthExceptionCode,
 } from 'src/engine/core-modules/auth/auth.exception';
 
-export type OIDCRequest = Omit<
+export type OidcRequest = Omit<
   Request,
   'user' | 'workspace' | 'workspaceMetadataVersion'
 > & {
@@ -21,12 +22,13 @@ export type OIDCRequest = Omit<
     firstName?: string | null;
     lastName?: string | null;
     workspaceInviteHash?: string;
+    workspacePersonalInviteToken?: string;
     oidcTokenClaims?: Record<string, unknown>;
   };
 };
 
 @Injectable()
-export class OIDCAuthStrategy extends PassportStrategy(
+export class OidcAuthStrategy extends PassportStrategy(
   Strategy,
   'openidconnect',
 ) {
@@ -55,6 +57,12 @@ export class OIDCAuthStrategy extends PassportStrategy(
         ...(req.query.workspaceInviteHash
           ? { workspaceInviteHash: req.query.workspaceInviteHash }
           : {}),
+        ...(isNonEmptyString(req.query.workspacePersonalInviteToken)
+          ? {
+              workspacePersonalInviteToken:
+                req.query.workspacePersonalInviteToken,
+            }
+          : {}),
       }),
     });
   }
@@ -62,6 +70,7 @@ export class OIDCAuthStrategy extends PassportStrategy(
   private extractState(req: Request): {
     identityProviderId: string;
     workspaceInviteHash?: string;
+    workspacePersonalInviteToken?: string;
   } {
     try {
       const state = JSON.parse(
@@ -77,6 +86,11 @@ export class OIDCAuthStrategy extends PassportStrategy(
       return {
         identityProviderId: state.identityProviderId,
         workspaceInviteHash: state.workspaceInviteHash,
+        workspacePersonalInviteToken: isNonEmptyString(
+          state.workspacePersonalInviteToken,
+        )
+          ? state.workspacePersonalInviteToken
+          : undefined,
       };
     } catch {
       throw new AuthException('Invalid state', AuthExceptionCode.INVALID_INPUT);
@@ -87,7 +101,7 @@ export class OIDCAuthStrategy extends PassportStrategy(
     req: Request,
     tokenset: TokenSet,
     // oxlint-disable-next-line typescript/no-explicit-any
-    done: (err: any, user?: OIDCRequest['user']) => void,
+    done: (err: any, user?: OidcRequest['user']) => void,
   ) {
     try {
       const state = this.extractState(req);
@@ -108,6 +122,7 @@ export class OIDCAuthStrategy extends PassportStrategy(
       done(null, {
         email,
         workspaceInviteHash: state.workspaceInviteHash,
+        workspacePersonalInviteToken: state.workspacePersonalInviteToken,
         identityProviderId: state.identityProviderId,
         ...(userinfo.given_name ? { firstName: userinfo.given_name } : {}),
         ...(userinfo.family_name ? { lastName: userinfo.family_name } : {}),

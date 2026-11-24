@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { ApplicationModule } from 'src/engine/core-modules/application/application.module';
 import { MetricsModule } from 'src/engine/core-modules/metrics/metrics.module';
 import { MetadataSideEffectModule } from 'src/engine/metadata-modules/metadata-side-effect/metadata-side-effect.module';
 import { WorkspaceCacheModule } from 'src/engine/workspace-cache/workspace-cache.module';
@@ -16,15 +17,13 @@ import { WorkspaceMigrationRunnerModule } from 'src/engine/workspace-manager/wor
     WorkspaceCacheModule,
     MetadataSideEffectModule,
     MetricsModule,
+    ApplicationModule,
   ],
   providers: [
     WorkspaceMigrationValidateBuildAndRunService,
     WorkspaceMigrationBuildOrchestratorService,
     WorkspaceMigrationFlatEntityMapsService,
   ],
-  exports: [
-    WorkspaceMigrationValidateBuildAndRunService,
-    WorkspaceMigrationBuildOrchestratorService,
-  ],
+  exports: [WorkspaceMigrationValidateBuildAndRunService],
 })
 export class WorkspaceMigrationModule {}

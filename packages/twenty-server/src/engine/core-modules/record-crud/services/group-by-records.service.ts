@@ -7,6 +7,7 @@ import {
   type OrderByWithGroupBy,
 } from 'twenty-shared/types';
 
+import { type CommonSelectedFields } from 'src/engine/api/common/types/common-selected-fields-result.type';
 import { GroupByArgProcessorService } from 'src/engine/api/common/common-args-processors/group-by-arg-processor/group-by-arg-processor.service';
 import { CommonGroupByQueryRunnerService } from 'src/engine/api/common/common-query-runners/common-group-by-query-runner.service';
 import { CommonQueryRunnerException } from 'src/engine/api/common/common-query-runners/errors/common-query-runner.exception';
@@ -17,6 +18,7 @@ import {
 import { CommonApiContextBuilderService } from 'src/engine/core-modules/record-crud/services/common-api-context-builder.service';
 import { type GroupByRecordsParams } from 'src/engine/core-modules/record-crud/types/group-by-records-params.type';
 import { type GroupByRecordsResult } from 'src/engine/core-modules/record-crud/types/group-by-records-result.type';
+import { getGroupByDimensionLabel } from 'src/engine/core-modules/record-crud/utils/get-group-by-dimension-label.util';
 import { type ToolOutput } from 'src/engine/core-modules/tool/types/tool-output.type';
 
 @Injectable()
@@ -41,7 +43,6 @@ export class GroupByRecordsService {
       orderBy = 'DESC',
       filter,
       authContext,
-      rolePermissionConfig,
     } = params;
 
     try {
@@ -49,19 +50,17 @@ export class GroupByRecordsService {
         queryRunnerContext,
         flatObjectMetadata,
         flatFieldMetadataMaps,
-        objectsPermissions,
+        unreadableFieldMetadataIds,
       } = await this.commonApiContextBuilder.build({
         authContext,
         objectName,
-        rolePermissionConfig,
       });
 
       const availableAggregations =
         this.groupByArgProcessor.getAvailableAggregations({
           flatObjectMetadata,
           flatFieldMetadataMaps,
-          restrictedFields:
-            objectsPermissions[flatObjectMetadata.id]?.restrictedFields,
+          unreadableFieldMetadataIds,
         });
 
       let aggregateFieldKey: string;
@@ -84,9 +83,10 @@ export class GroupByRecordsService {
         throw error;
       }
 
-      const selectedFields = {
-        [aggregateFieldKey]: true,
-        groupByDimensionValues: true,
+      const selectedFields: CommonSelectedFields = {
+        fields: {},
+        aggregates: [aggregateFieldKey],
+        relations: {},
       };
 
       const mappedOrderBy: OrderByWithGroupBy = [
@@ -115,9 +115,7 @@ export class GroupByRecordsService {
         queryRunnerContext,
       );
 
-      const dimensionLabels = groupBy.map((entry) =>
-        this.getDimensionLabelFromGroupByEntry(entry),
-      );
+      const dimensionLabels = groupBy.map(getGroupByDimensionLabel);
 
       this.logger.log(
         `Grouped ${objectName} by ${dimensionLabels.join(', ')}: ${results.length} groups`,
@@ -154,43 +152,5 @@ export class GroupByRecordsService {
           error instanceof Error ? error.message : 'Failed to group records',
       };
     }
-  }
-
-  private getDimensionLabelFromGroupByEntry(
-    entry: GroupByRecordsParams['groupBy'][number],
-  ): string {
-    const fieldEntries = Object.entries(entry);
-
-    if (fieldEntries.length === 0) {
-      return '';
-    }
-
-    const [fieldName, fieldDefinition] = fieldEntries[0];
-
-    if (fieldDefinition === true) {
-      return fieldName;
-    }
-
-    if (typeof fieldDefinition !== 'object' || fieldDefinition === null) {
-      return fieldName;
-    }
-
-    const nestedEntries = Object.entries(fieldDefinition);
-
-    if (nestedEntries.length !== 1) {
-      return fieldName;
-    }
-
-    const [nestedFieldName, nestedFieldDefinition] = nestedEntries[0];
-
-    if (nestedFieldDefinition !== true) {
-      return fieldName;
-    }
-
-    if (nestedFieldName === 'id' && fieldName.endsWith('Id')) {
-      return fieldName;
-    }
-
-    return `${fieldName}.${nestedFieldName}`;
   }
 }

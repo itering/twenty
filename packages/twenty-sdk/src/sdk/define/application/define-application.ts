@@ -1,10 +1,34 @@
 import { isNonEmptyString } from '@sniptt/guards';
 import {
+  APPLICATION_BILLING_PRICE_CURRENCIES,
+  APPLICATION_BILLING_PRICE_PERIODS,
+  APPLICATION_BILLING_PRICE_TYPES,
+  APPLICATION_BILLING_PRICE_UNITS,
   APPLICATION_CATEGORIES,
+  APPLICATION_VARIABLE_SCOPES,
+  isApplicationBillingPriceAmount,
+  isApplicationBillingPriceCurrency,
+  isApplicationBillingPricePeriod,
+  isApplicationBillingPriceType,
+  isApplicationBillingPriceUnit,
+  isApplicationVariableScope,
   isKnownApplicationCategory,
+  isRecurringChargePeriod,
+  isRecurringChargeUnit,
+  isUsageOperationTypeValue,
+  MAX_APPLICATION_BILLING_PRICE_AMOUNT_CENTS,
+  MAX_RECURRING_CHARGE_MICRO_CREDITS_PER_UNIT,
+  RECURRING_CHARGE_PERIODS,
+  RECURRING_CHARGE_UNITS,
+  USAGE_OPERATION_TYPES,
 } from 'twenty-shared/application';
+import { MAX_ALLOWED_IFRAME_ORIGINS } from 'twenty-shared/constants';
 import { FieldMetadataType } from 'twenty-shared/types';
-import { isNonEmptyArray } from 'twenty-shared/utils';
+import {
+  isDefined,
+  isNonEmptyArray,
+  normalizeIframeOrigin,
+} from 'twenty-shared/utils';
 
 import { type ApplicationConfig } from '@/sdk/define/application/application-config';
 import { normalizeApplicationAssets } from '@/sdk/define/application/utils/normalize-application-assets';
@@ -35,6 +59,225 @@ export const defineApplication: DefineEntity<ApplicationConfig> = (config) => {
         `Application variable "${variableName}" of type ${variable.type} must define non-empty options`,
       );
     }
+
+    if (variable.isRequired && variable.isDeprecated) {
+      warnings.push(
+        `Application variable "${variableName}" is both required and deprecated. \`isDeprecated\` wins: the variable is excluded from the application configuration check.`,
+      );
+    }
+
+    if (
+      isDefined(variable.scope) &&
+      !isApplicationVariableScope(variable.scope)
+    ) {
+      errors.push(
+        `Application variable "${variableName}" must have a known scope (${APPLICATION_VARIABLE_SCOPES.join(
+          ', ',
+        )})`,
+      );
+    }
+  }
+
+  const billableOperations = config.billing?.operations ?? {};
+  const recurringCharges = config.billing?.recurring ?? {};
+
+  for (const [operationName, billableOperation] of Object.entries(
+    billableOperations,
+  )) {
+    if (!isDefined(billableOperation)) {
+      continue;
+    }
+
+    if (
+      isDefined(billableOperation.operationType) &&
+      !isUsageOperationTypeValue(billableOperation.operationType)
+    ) {
+      errors.push(
+        `Billable operation "${operationName}" must map to a known operationType (${USAGE_OPERATION_TYPES.join(
+          ', ',
+        )})`,
+      );
+    }
+
+    if (!isNonEmptyString(billableOperation.label)) {
+      errors.push(
+        `Billable operation "${operationName}" must have a non empty label`,
+      );
+    }
+
+    if (
+      isDefined(billableOperation.icon) &&
+      !isNonEmptyString(billableOperation.icon)
+    ) {
+      errors.push(
+        `Billable operation "${operationName}" must have a non empty icon when set`,
+      );
+    }
+  }
+
+  for (const [chargeName, recurringCharge] of Object.entries(
+    recurringCharges,
+  )) {
+    if (!isDefined(recurringCharge)) {
+      continue;
+    }
+
+    if (!isRecurringChargePeriod(recurringCharge.period)) {
+      errors.push(
+        `Recurring charge "${chargeName}" must have a known period (${RECURRING_CHARGE_PERIODS.join(
+          ', ',
+        )})`,
+      );
+    }
+
+    if (
+      isDefined(recurringCharge.per) &&
+      !isRecurringChargeUnit(recurringCharge.per)
+    ) {
+      errors.push(
+        `Recurring charge "${chargeName}" must be charged per a known unit (${RECURRING_CHARGE_UNITS.join(
+          ', ',
+        )}) or omit \`per\` for a flat fee`,
+      );
+    }
+
+    if (
+      !Number.isSafeInteger(recurringCharge.amountMicroCredits) ||
+      recurringCharge.amountMicroCredits <= 0
+    ) {
+      errors.push(
+        `Recurring charge "${chargeName}" must have a positive integer amountMicroCredits`,
+      );
+    } else if (
+      recurringCharge.amountMicroCredits >
+      MAX_RECURRING_CHARGE_MICRO_CREDITS_PER_UNIT
+    ) {
+      errors.push(
+        `Recurring charge "${chargeName}" exceeds the maximum amountMicroCredits of ${MAX_RECURRING_CHARGE_MICRO_CREDITS_PER_UNIT}. A per-member charge declares the rate per member, not the total.`,
+      );
+    }
+
+    if (!isNonEmptyString(recurringCharge.label)) {
+      errors.push(
+        `Recurring charge "${chargeName}" must have a non empty label`,
+      );
+    }
+
+    // Both land in the same per-application usage breakdown, keyed by name.
+    if (Object.prototype.hasOwnProperty.call(billableOperations, chargeName)) {
+      errors.push(
+        `"${chargeName}" is declared both as a recurring charge and as a billable operation. Give them distinct names.`,
+      );
+    }
+  }
+
+  if (Object.values(recurringCharges).some(isDefined)) {
+    warnings.push(
+      '`billing.recurring` is deprecated in favor of `billing.prices`. Prices are not billed yet: keep your recurring charges until they are.',
+    );
+  }
+
+  (config.billing?.prices ?? []).forEach((price, index) => {
+    const priceName = `billing.prices[${index}]`;
+
+    if (!isNonEmptyString(price.universalIdentifier)) {
+      errors.push(`${priceName} must have a universalIdentifier`);
+    }
+
+    if (!isNonEmptyString(price.label)) {
+      errors.push(`${priceName} must have a non empty label`);
+    }
+
+    if (isDefined(price.description) && !isNonEmptyString(price.description)) {
+      errors.push(`${priceName} must have a non empty description when set`);
+    }
+
+    if (!isApplicationBillingPriceType(price.type)) {
+      errors.push(
+        `${priceName} must have a known type (${APPLICATION_BILLING_PRICE_TYPES.join(
+          ', ',
+        )})`,
+      );
+    }
+
+    if (!isApplicationBillingPricePeriod(price.billingPeriod)) {
+      errors.push(
+        `${priceName} must have a known billingPeriod (${APPLICATION_BILLING_PRICE_PERIODS.join(
+          ', ',
+        )})`,
+      );
+    }
+
+    if (!isApplicationBillingPriceAmount(price.amountCents)) {
+      errors.push(
+        `${priceName} must have a positive integer amountCents of at most ${MAX_APPLICATION_BILLING_PRICE_AMOUNT_CENTS}`,
+      );
+    }
+
+    if (
+      isDefined(price.currency) &&
+      !isApplicationBillingPriceCurrency(price.currency)
+    ) {
+      errors.push(
+        `${priceName} must be priced in a supported currency (${APPLICATION_BILLING_PRICE_CURRENCIES.join(
+          ', ',
+        )}) or omit \`currency\``,
+      );
+    }
+
+    if (isDefined(price.per) && !isApplicationBillingPriceUnit(price.per)) {
+      errors.push(
+        `${priceName} must be billed per a known unit (${APPLICATION_BILLING_PRICE_UNITS.join(
+          ', ',
+        )}) or omit \`per\` for a flat fee`,
+      );
+    }
+  });
+
+  for (const [variableName, variable] of Object.entries(
+    config.serverVariables ?? {},
+  )) {
+    if (variable.isRequired && variable.isDeprecated) {
+      warnings.push(
+        `Server variable "${variableName}" is both required and deprecated. \`isDeprecated\` wins: the variable is excluded from the application configuration check.`,
+      );
+    }
+  }
+
+  const requestedIframeMediaPermissions =
+    config.requestedIframeMediaPermissions ?? [];
+
+  if (requestedIframeMediaPermissions.length > MAX_ALLOWED_IFRAME_ORIGINS) {
+    errors.push(
+      `An application can request iframe media access for up to ${MAX_ALLOWED_IFRAME_ORIGINS} origins`,
+    );
+  }
+
+  const requestedIframeMediaOrigins = new Set<string>();
+
+  for (const permission of requestedIframeMediaPermissions) {
+    if (
+      normalizeIframeOrigin(permission.origin, { isHttpsOnly: true }) !==
+      permission.origin
+    ) {
+      errors.push(
+        `Requested iframe media origin "${permission.origin}" must be an exact HTTPS origin, such as https://example.com`,
+      );
+    }
+
+    if (!permission.microphone && !permission.camera) {
+      errors.push(
+        `Requested iframe media origin "${permission.origin}" must allow the microphone, the camera, or both`,
+      );
+    }
+
+    if (requestedIframeMediaOrigins.has(permission.origin)) {
+      errors.push(
+        `Requested iframe media origin "${permission.origin}" is declared more than once`,
+      );
+    }
+
+    requestedIframeMediaOrigins.add(permission.origin);
   }
 
   if (config.defaultRoleUniversalIdentifier) {

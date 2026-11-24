@@ -9,7 +9,11 @@ import {
 
 export const computeSubscriptionUpdateOptions = (
   subscriptionUpdate: SubscriptionUpdate,
-  context?: { currentSeats?: number; isTrialing?: boolean },
+  context?: {
+    isQuantityIncrease?: boolean;
+    isTrialing?: boolean;
+    isSendInvoice?: boolean;
+  },
 ): {
   proration: Stripe.SubscriptionUpdateParams.ProrationBehavior;
   metadata?: Record<string, string>;
@@ -36,14 +40,15 @@ export const computeSubscriptionUpdateOptions = (
             proration: 'create_prorations',
             anchor: 'now',
           };
-    case SubscriptionUpdateType.SEATS: {
-      const currentSeats = context?.currentSeats ?? subscriptionUpdate.newSeats;
+    case SubscriptionUpdateType.QUANTITIES:
+    case SubscriptionUpdateType.APPLICATIONS: {
+      const shouldInvoiceImmediately =
+        context?.isQuantityIncrease && !context?.isSendInvoice;
 
       return {
-        proration:
-          subscriptionUpdate.newSeats > currentSeats
-            ? 'always_invoice'
-            : 'create_prorations',
+        proration: shouldInvoiceImmediately
+          ? 'always_invoice'
+          : 'create_prorations',
       };
     }
     default:

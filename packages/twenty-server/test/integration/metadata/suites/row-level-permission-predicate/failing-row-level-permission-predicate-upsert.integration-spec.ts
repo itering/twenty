@@ -2,40 +2,94 @@ import { expectOneNotInternalServerErrorSnapshot } from 'test/integration/graphq
 import { findManyObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/find-many-object-metadata.util';
 import { createOneRole } from 'test/integration/metadata/suites/role/utils/create-one-role.util';
 import { deleteOneRole } from 'test/integration/metadata/suites/role/utils/delete-one-role.util';
-import { upsertRowLevelPermissionPredicates } from 'test/integration/metadata/suites/row-level-permission-predicate/utils/upsert-row-level-permission-predicates.util';
+import { findOneRoleByLabel } from 'test/integration/metadata/suites/role/utils/find-one-role-by-label.util';
+import { upsertRowLevelPermissionRules } from 'test/integration/metadata/suites/row-level-permission-predicate/utils/upsert-row-level-permission-rules.util';
+import { updateFeatureFlag } from 'test/integration/metadata/suites/utils/update-feature-flag.util';
 import { jestExpectToBeDefined } from 'test/utils/jest-expect-to-be-defined.util.test';
 import {
   eachTestingContextFilter,
   type EachTestingContext,
 } from 'twenty-shared/testing';
 import {
+  FeatureFlagKey,
   RowLevelPermissionPredicateGroupLogicalOperator,
   RowLevelPermissionPredicateOperand,
 } from 'twenty-shared/types';
 import { v4 } from 'uuid';
 
-import { type UpsertRowLevelPermissionPredicatesInput } from 'src/engine/metadata-modules/row-level-permission-predicate/dtos/inputs/upsert-row-level-permission-predicates.input';
+import { type UpsertRowLevelPermissionRulesInput } from 'src/engine/metadata-modules/row-level-permission-predicate/dtos/inputs/upsert-row-level-permission-rules.input';
 
 type TestSetup = {
   createdRoleId: string;
+  adminRoleId: string;
   companyObjectMetadataId: string;
   companyNameFieldMetadataId: string;
+  personCompanyFieldMetadataId: string;
+  workspaceMemberCalendarStartDayFieldMetadataId: string;
+  workspaceMemberBlocklistFieldMetadataId: string;
 };
 
 type TestContext = {
-  input: (testSetup: TestSetup) => UpsertRowLevelPermissionPredicatesInput;
+  input: (testSetup: TestSetup) => UpsertRowLevelPermissionRulesInput;
 };
 
 const failingRowLevelPermissionPredicateUpsertTestCases: EachTestingContext<TestContext>[] =
   [
+    {
+      title:
+        'when the workspace member relation is not a relation of the workspace member',
+      context: {
+        input: (testSetup) => ({
+          roleId: testSetup.createdRoleId,
+          objectMetadataId: testSetup.companyObjectMetadataId,
+          rules: [
+            {
+              predicates: [
+                {
+                  fieldMetadataId: testSetup.companyNameFieldMetadataId,
+                  operand: RowLevelPermissionPredicateOperand.IS,
+                  workspaceMemberRelationFieldMetadataId:
+                    testSetup.personCompanyFieldMetadataId,
+                  workspaceMemberFieldMetadataId:
+                    testSetup.companyNameFieldMetadataId,
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    },
+    {
+      title:
+        'when the workspace member field is not a field of the object the workspace member relation reaches',
+      context: {
+        input: (testSetup) => ({
+          roleId: testSetup.createdRoleId,
+          objectMetadataId: testSetup.companyObjectMetadataId,
+          rules: [
+            {
+              predicates: [
+                {
+                  fieldMetadataId: testSetup.companyNameFieldMetadataId,
+                  operand: RowLevelPermissionPredicateOperand.IS,
+                  workspaceMemberRelationFieldMetadataId:
+                    testSetup.workspaceMemberBlocklistFieldMetadataId,
+                  workspaceMemberFieldMetadataId:
+                    testSetup.companyNameFieldMetadataId,
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    },
     {
       title: 'when roleId is not a valid UUID',
       context: {
         input: (testSetup) => ({
           roleId: 'invalid-uuid',
           objectMetadataId: testSetup.companyObjectMetadataId,
-          predicates: [],
-          predicateGroups: [],
+          rules: [],
         }),
       },
     },
@@ -45,8 +99,7 @@ const failingRowLevelPermissionPredicateUpsertTestCases: EachTestingContext<Test
         input: (testSetup) => ({
           roleId: testSetup.createdRoleId,
           objectMetadataId: 'invalid-uuid',
-          predicates: [],
-          predicateGroups: [],
+          rules: [],
         }),
       },
     },
@@ -56,13 +109,16 @@ const failingRowLevelPermissionPredicateUpsertTestCases: EachTestingContext<Test
         input: (testSetup) => ({
           roleId: testSetup.createdRoleId,
           objectMetadataId: testSetup.companyObjectMetadataId,
-          predicates: [
+          rules: [
             {
-              fieldMetadataId: 'invalid-uuid',
-              operand: RowLevelPermissionPredicateOperand.CONTAINS,
+              predicates: [
+                {
+                  fieldMetadataId: 'invalid-uuid',
+                  operand: RowLevelPermissionPredicateOperand.CONTAINS,
+                },
+              ],
             },
           ],
-          predicateGroups: [],
         }),
       },
     },
@@ -72,82 +128,160 @@ const failingRowLevelPermissionPredicateUpsertTestCases: EachTestingContext<Test
         input: (testSetup) => ({
           roleId: testSetup.createdRoleId,
           objectMetadataId: testSetup.companyObjectMetadataId,
-          predicates: [
+          rules: [
             {
-              fieldMetadataId: v4(),
-              operand: RowLevelPermissionPredicateOperand.CONTAINS,
+              predicates: [
+                {
+                  fieldMetadataId: v4(),
+                  operand: RowLevelPermissionPredicateOperand.CONTAINS,
+                },
+              ],
             },
           ],
-          predicateGroups: [],
+        }),
+      },
+    },
+    {
+      title: 'when the operand is not supported for the field type',
+      context: {
+        input: (testSetup) => ({
+          roleId: testSetup.createdRoleId,
+          objectMetadataId: testSetup.companyObjectMetadataId,
+          rules: [
+            {
+              predicates: [
+                {
+                  fieldMetadataId: testSetup.companyNameFieldMetadataId,
+                  operand:
+                    RowLevelPermissionPredicateOperand.GREATER_THAN_OR_EQUAL,
+                  value: 'Apple',
+                },
+              ],
+            },
+          ],
         }),
       },
     },
     {
       title:
-        'when rowLevelPermissionPredicateGroupId in predicate does not exist',
+        'when the predicate compares a field to a workspace member field of another type',
       context: {
         input: (testSetup) => ({
           roleId: testSetup.createdRoleId,
           objectMetadataId: testSetup.companyObjectMetadataId,
-          predicates: [
+          rules: [
             {
-              fieldMetadataId: testSetup.companyNameFieldMetadataId,
-              operand: RowLevelPermissionPredicateOperand.CONTAINS,
-              rowLevelPermissionPredicateGroupId: v4(),
-            },
-          ],
-          predicateGroups: [],
-        }),
-      },
-    },
-    {
-      title:
-        'when parentRowLevelPermissionPredicateGroupId in group does not exist',
-      context: {
-        input: (testSetup) => ({
-          roleId: testSetup.createdRoleId,
-          objectMetadataId: testSetup.companyObjectMetadataId,
-          predicates: [],
-          predicateGroups: [
-            {
-              objectMetadataId: testSetup.companyObjectMetadataId,
-              logicalOperator:
-                RowLevelPermissionPredicateGroupLogicalOperator.AND,
-              parentRowLevelPermissionPredicateGroupId: v4(),
+              predicates: [
+                {
+                  fieldMetadataId: testSetup.companyNameFieldMetadataId,
+                  operand: RowLevelPermissionPredicateOperand.IS,
+                  workspaceMemberFieldMetadataId:
+                    testSetup.workspaceMemberCalendarStartDayFieldMetadataId,
+                },
+              ],
             },
           ],
         }),
       },
     },
     {
-      title: 'when objectMetadataId in predicate group is not a valid UUID',
+      title: 'when the relation hop is not a relation field',
       context: {
         input: (testSetup) => ({
           roleId: testSetup.createdRoleId,
           objectMetadataId: testSetup.companyObjectMetadataId,
-          predicates: [],
-          predicateGroups: [
+          rules: [
             {
-              objectMetadataId: 'invalid-uuid',
-              logicalOperator:
-                RowLevelPermissionPredicateGroupLogicalOperator.AND,
+              predicates: [
+                {
+                  relationFieldMetadataId: testSetup.companyNameFieldMetadataId,
+                  fieldMetadataId: testSetup.companyNameFieldMetadataId,
+                  operand: RowLevelPermissionPredicateOperand.CONTAINS,
+                  value: 'Apple',
+                },
+              ],
             },
           ],
         }),
       },
     },
     {
-      title: 'when objectMetadataId in predicate group does not exist',
+      title: 'when the relation hop does not belong to the restricted object',
       context: {
         input: (testSetup) => ({
           roleId: testSetup.createdRoleId,
           objectMetadataId: testSetup.companyObjectMetadataId,
-          predicates: [],
-          predicateGroups: [
+          rules: [
             {
-              objectMetadataId: v4(),
-              logicalOperator:
-                RowLevelPermissionPredicateGroupLogicalOperator.AND,
+              predicates: [
+                {
+                  relationFieldMetadataId:
+                    testSetup.personCompanyFieldMetadataId,
+                  fieldMetadataId: testSetup.companyNameFieldMetadataId,
+                  operand: RowLevelPermissionPredicateOperand.CONTAINS,
+                  value: 'Apple',
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    },
+    {
+      title: 'when the relation hop does not exist',
+      context: {
+        input: (testSetup) => ({
+          roleId: testSetup.createdRoleId,
+          objectMetadataId: testSetup.companyObjectMetadataId,
+          rules: [
+            {
+              predicates: [
+                {
+                  relationFieldMetadataId: v4(),
+                  fieldMetadataId: testSetup.companyNameFieldMetadataId,
+                  operand: RowLevelPermissionPredicateOperand.CONTAINS,
+                  value: 'Apple',
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    },
+    {
+      title: 'when adding a predicate to a non-editable role',
+      context: {
+        input: (testSetup) => ({
+          roleId: testSetup.adminRoleId,
+          objectMetadataId: testSetup.companyObjectMetadataId,
+          rules: [
+            {
+              predicates: [
+                {
+                  fieldMetadataId: testSetup.companyNameFieldMetadataId,
+                  operand: RowLevelPermissionPredicateOperand.CONTAINS,
+                  value: 'Apple',
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    },
+    {
+      title: 'when adding a predicate group to a non-editable role',
+      context: {
+        input: (testSetup) => ({
+          roleId: testSetup.adminRoleId,
+          objectMetadataId: testSetup.companyObjectMetadataId,
+          rules: [
+            {
+              predicateGroups: [
+                {
+                  logicalOperator:
+                    RowLevelPermissionPredicateGroupLogicalOperator.AND,
+                },
+              ],
             },
           ],
         }),
@@ -157,8 +291,13 @@ const failingRowLevelPermissionPredicateUpsertTestCases: EachTestingContext<Test
 
 describe('Row Level Permission Predicate upsert should fail', () => {
   let createdRoleId: string;
+  let adminRoleId: string;
   let companyObjectMetadataId: string;
   let companyNameFieldMetadataId: string;
+  let personObjectMetadataId: string;
+  let personCompanyFieldMetadataId: string;
+  let workspaceMemberCalendarStartDayFieldMetadataId: string;
+  let workspaceMemberBlocklistFieldMetadataId: string;
 
   beforeAll(async () => {
     const { objects } = await findManyObjectMetadata({
@@ -194,6 +333,45 @@ describe('Row Level Permission Predicate upsert should fail', () => {
     jestExpectToBeDefined(nameField);
     companyNameFieldMetadataId = nameField.id;
 
+    const personObjectMetadata = objects.find(
+      (object: { nameSingular: string }) => object.nameSingular === 'person',
+    );
+
+    jestExpectToBeDefined(personObjectMetadata);
+    personObjectMetadataId = personObjectMetadata.id;
+    jestExpectToBeDefined(personObjectMetadata.fieldsList);
+
+    const personCompanyField = personObjectMetadata.fieldsList.find(
+      (field: { name: string }) => field.name === 'company',
+    );
+
+    jestExpectToBeDefined(personCompanyField);
+    personCompanyFieldMetadataId = personCompanyField.id;
+
+    const calendarStartDayField = objects
+      .find(
+        (object: { nameSingular: string }) =>
+          object.nameSingular === 'workspaceMember',
+      )
+      ?.fieldsList?.find(
+        (field: { name: string }) => field.name === 'calendarStartDay',
+      );
+
+    jestExpectToBeDefined(calendarStartDayField);
+    workspaceMemberCalendarStartDayFieldMetadataId = calendarStartDayField.id;
+
+    const blocklistField = objects
+      .find(
+        (object: { nameSingular: string }) =>
+          object.nameSingular === 'workspaceMember',
+      )
+      ?.fieldsList?.find(
+        (field: { name: string }) => field.name === 'blocklist',
+      );
+
+    jestExpectToBeDefined(blocklistField);
+    workspaceMemberBlocklistFieldMetadataId = blocklistField.id;
+
     const { data: roleData } = await createOneRole({
       expectToFail: false,
       input: {
@@ -214,31 +392,107 @@ describe('Row Level Permission Predicate upsert should fail', () => {
 
     createdRoleId = roleData?.createOneRole?.id;
     jestExpectToBeDefined(createdRoleId);
+
+    adminRoleId = (await findOneRoleByLabel({ label: 'Admin' })).id;
+
+    await updateFeatureFlag({
+      featureFlag: FeatureFlagKey.IS_ROW_LEVEL_PERMISSION_RELATION_HOP_ENABLED,
+      value: true,
+      expectToFail: false,
+    });
   });
 
   afterAll(async () => {
+    await updateFeatureFlag({
+      featureFlag: FeatureFlagKey.IS_ROW_LEVEL_PERMISSION_RELATION_HOP_ENABLED,
+      value: false,
+      expectToFail: false,
+    });
+
     if (createdRoleId) {
       await deleteOneRole({
         expectToFail: false,
         input: { idToDelete: createdRoleId },
       });
     }
+
+    const adminRole = await findOneRoleByLabel({
+      label: 'Admin',
+      gqlFields: `
+        id
+        label
+        rowLevelPermissionPredicates {
+          id
+        }
+        rowLevelPermissionPredicateGroups {
+          id
+        }
+      `,
+    });
+
+    expect(adminRole.rowLevelPermissionPredicates).toEqual([]);
+    expect(adminRole.rowLevelPermissionPredicateGroups).toEqual([]);
   });
 
   it.each(
     eachTestingContextFilter(failingRowLevelPermissionPredicateUpsertTestCases),
   )('$title', async ({ context }) => {
-    const { errors } = await upsertRowLevelPermissionPredicates({
+    const { errors } = await upsertRowLevelPermissionRules({
       expectToFail: true,
       input: context.input({
         createdRoleId,
+        adminRoleId,
         companyObjectMetadataId,
         companyNameFieldMetadataId,
+        personCompanyFieldMetadataId,
+        workspaceMemberCalendarStartDayFieldMetadataId,
+        workspaceMemberBlocklistFieldMetadataId,
       }),
     });
 
     expectOneNotInternalServerErrorSnapshot({
       errors,
     });
+  });
+
+  it('when relation hops are not enabled for the workspace', async () => {
+    await updateFeatureFlag({
+      featureFlag: FeatureFlagKey.IS_ROW_LEVEL_PERMISSION_RELATION_HOP_ENABLED,
+      value: false,
+      expectToFail: false,
+    });
+
+    try {
+      const { errors } = await upsertRowLevelPermissionRules({
+        expectToFail: true,
+        input: {
+          roleId: createdRoleId,
+          objectMetadataId: personObjectMetadataId,
+          rules: [
+            {
+              predicates: [
+                {
+                  relationFieldMetadataId: personCompanyFieldMetadataId,
+                  fieldMetadataId: companyNameFieldMetadataId,
+                  operand: RowLevelPermissionPredicateOperand.CONTAINS,
+                  value: 'Apple',
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      expectOneNotInternalServerErrorSnapshot({
+        errors,
+      });
+    } finally {
+      await updateFeatureFlag({
+        featureFlag:
+          FeatureFlagKey.IS_ROW_LEVEL_PERMISSION_RELATION_HOP_ENABLED,
+        value: true,
+        expectToFail: false,
+      });
+    }
   });
 });

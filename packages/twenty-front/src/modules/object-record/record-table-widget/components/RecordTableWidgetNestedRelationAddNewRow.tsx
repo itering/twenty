@@ -1,10 +1,12 @@
 import { RecordTableActionRow } from '@/object-record/record-table/record-table-row/components/RecordTableActionRow';
-import { RecordTableWidgetNestedRelationPickerDropdownContent } from '@/object-record/record-table-widget/components/RecordTableWidgetNestedRelationPickerDropdownContent';
+import { RecordTableWidgetRelationPickerDropdownContent } from '@/object-record/record-table-widget/components/RecordTableWidgetRelationPickerDropdownContent';
 import { type RecordTableWidgetNestedRelationCreateThrough } from '@/object-record/record-table-widget/contexts/RecordTableWidgetContext';
-import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
-import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
-import { t } from '@lingui/core/macro';
+import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
+import { DropdownRoot } from '@/ui/layout/dropdown/components/DropdownRoot';
+import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
+import { Dropdown } from 'twenty-ui/components/navigation';
 import { IconPlus } from 'twenty-ui/icon';
+import { useLingui } from '@lingui/react/macro';
 
 type RecordTableWidgetNestedRelationAddNewRowProps = {
   dropdownId: string;
@@ -17,27 +19,21 @@ export const RecordTableWidgetNestedRelationAddNewRow = ({
   nestedRelationCreateThrough,
   onRelationRecordSelected,
 }: RecordTableWidgetNestedRelationAddNewRowProps) => {
-  const { closeDropdown } = useCloseDropdown();
-
-  const handleRelationRecordSelected = (relationRecordId: string) => {
-    closeDropdown(dropdownId);
-    onRelationRecordSelected(relationRecordId);
-  };
-
+  const { t } = useLingui();
   return (
-    <Dropdown
-      dropdownId={dropdownId}
-      dropdownPlacement="bottom-start"
-      clickableComponentWidth="100%"
-      clickableComponent={
+    <DropdownRoot dropdownId={dropdownId} type="picker">
+      <Dropdown.Trigger render={<div />} nativeButton={false}>
         <RecordTableActionRow LeftIcon={IconPlus} text={t`Add New`} />
-      }
-      dropdownComponents={
-        <RecordTableWidgetNestedRelationPickerDropdownContent
-          nestedRelationCreateThrough={nestedRelationCreateThrough}
-          onRelationRecordSelected={handleRelationRecordSelected}
+      </Dropdown.Trigger>
+      <DropdownContent align="start" width={GenericDropdownContentWidth.Medium}>
+        <RecordTableWidgetRelationPickerDropdownContent
+          objectNameSingular={
+            nestedRelationCreateThrough.relationObjectMetadataNameSingular
+          }
+          recordsFilter={nestedRelationCreateThrough.relationRecordsFilter}
+          onRelationRecordSelected={onRelationRecordSelected}
         />
-      }
-    />
+      </DropdownContent>
+    </DropdownRoot>
   );
 };

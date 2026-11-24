@@ -1,40 +1,15 @@
+import { useState } from 'react';
 import { defineFrontComponent } from 'twenty-sdk/define';
-import { IconHome, IconUser } from 'twenty-ui/icon';
 import {
-  ClickToActionLink,
-  ContactLink,
-  GithubVersionLink,
-  LinkType,
-  MenuItem,
-  MenuItemAvatar,
-  MenuItemDraggable,
-  MenuItemHotKeys,
-  MenuItemLeftContent,
-  MenuItemMultiSelect,
-  MenuItemMultiSelectAvatar,
-  MenuItemMultiSelectTag,
-  MenuItemNavigate,
-  MenuItemSelect,
-  MenuItemSelectAvatar,
-  MenuItemSelectColor,
-  MenuItemSelectTag,
-  MenuItemSuggestion,
-  MenuItemToggle,
-  MenuPicker,
-  NavigationBar,
-  NavigationBarItem,
-  RawLink,
-  RoundedLink,
-  SocialLink,
-  StyledHoverableMenuItemBase,
-  StyledMenuItemIconCheck,
-  StyledMenuItemLabel,
-  StyledMenuItemLeftContent,
-  StyledMenuItemSelect,
-  UndecoratedLink,
-} from 'twenty-ui/navigation';
-import { ThemeProvider } from 'twenty-ui/theme-constants';
-
+  DEFAULT_COLOR_LABELS,
+  ListItemButton,
+} from 'twenty-ui/components/navigation';
+import { OverflowingTextWithTooltip } from 'twenty-ui/primitives/typography';
+import { IconGripVertical, IconHome, IconUser } from 'twenty-ui/icon';
+import { Avatar, ColorSample, Tag } from 'twenty-ui/primitives/data-display';
+import { Button } from 'twenty-ui/primitives/input';
+import { Breadcrumb, ListItem } from 'twenty-ui/primitives/navigation';
+import { ThemeProvider } from 'twenty-ui/theme';
 import {
   ComponentGallery,
   type GalleryEntry,
@@ -42,213 +17,188 @@ import {
 
 const NAVIGATION_ENTRIES: GalleryEntry[] = [
   {
-    name: 'ClickToActionLink',
-    node: <ClickToActionLink href="#">Click me</ClickToActionLink>,
-  },
-  {
-    name: 'ContactLink',
-    node: <ContactLink href="https://twenty.com">Contact</ContactLink>,
-  },
-  {
-    name: 'GithubVersionLink',
-    node: <GithubVersionLink version="v1.0.0" />,
-  },
-  {
-    name: 'MenuItem',
-    node: <MenuItem text="Menu item" LeftIcon={IconUser} />,
-  },
-  {
-    name: 'MenuItemLeftContent',
-    node: <MenuItemLeftContent text="Left content" LeftIcon={IconUser} />,
-  },
-  {
-    name: 'StyledHoverableMenuItemBase',
+    name: 'Breadcrumb',
     node: (
-      <StyledHoverableMenuItemBase>Hoverable base</StyledHoverableMenuItemBase>
-    ),
-  },
-  {
-    name: 'StyledMenuItemIconCheck',
-    node: <StyledMenuItemIconCheck size={16} />,
-  },
-  {
-    name: 'StyledMenuItemLabel',
-    node: <StyledMenuItemLabel>Label</StyledMenuItemLabel>,
-  },
-  {
-    name: 'StyledMenuItemLeftContent',
-    node: (
-      <StyledMenuItemLeftContent>
-        Left content wrapper
-      </StyledMenuItemLeftContent>
-    ),
-  },
-  {
-    name: 'MenuItemAvatar',
-    node: <MenuItemAvatar text="Avatar item" />,
-  },
-  {
-    name: 'MenuItemDraggable',
-    node: (
-      <MenuItemDraggable
-        text="Draggable"
-        LeftIcon={IconUser}
-        gripMode="always"
-      />
-    ),
-  },
-  {
-    name: 'MenuItemHotKeys',
-    node: <MenuItemHotKeys hotKeys={['⌘', 'K']} />,
-  },
-  {
-    name: 'MenuItemMultiSelect',
-    node: (
-      <MenuItemMultiSelect
-        text="Multi select"
-        selected={false}
-        className=""
-        onSelectChange={() => {}}
-      />
-    ),
-  },
-  {
-    name: 'MenuItemMultiSelectAvatar',
-    node: (
-      <MenuItemMultiSelectAvatar
-        text="Multi avatar"
-        selected={true}
-        onSelectChange={() => {}}
-      />
-    ),
-  },
-  {
-    name: 'MenuItemMultiSelectTag',
-    node: (
-      <MenuItemMultiSelectTag
-        text="Tag"
-        color="blue"
-        selected={false}
-        onClick={() => {}}
-      />
-    ),
-  },
-  {
-    name: 'MenuItemNavigate',
-    node: (
-      <MenuItemNavigate
-        text="Navigate"
-        LeftIcon={IconUser}
-        onClick={() => {}}
-      />
-    ),
-  },
-  {
-    name: 'StyledMenuItemSelect',
-    node: <StyledMenuItemSelect>Select base</StyledMenuItemSelect>,
-  },
-  {
-    name: 'MenuItemSelect',
-    node: <MenuItemSelect text="Select" selected={true} onClick={() => {}} />,
-  },
-  {
-    name: 'MenuItemSelectAvatar',
-    node: (
-      <MenuItemSelectAvatar
-        text="Select avatar"
-        selected={true}
-        onClick={() => {}}
-      />
-    ),
-  },
-  {
-    name: 'MenuItemSelectColor',
-    node: (
-      <MenuItemSelectColor color="blue" selected={true} onClick={() => {}} />
-    ),
-  },
-  {
-    name: 'MenuItemSelectTag',
-    node: (
-      <MenuItemSelectTag
-        color="blue"
-        text="Select tag"
-        selected={true}
-        onClick={() => {}}
-      />
-    ),
-  },
-  {
-    name: 'MenuItemSuggestion',
-    node: <MenuItemSuggestion text="Suggestion" onClick={() => {}} />,
-  },
-  {
-    name: 'MenuItemToggle',
-    node: (
-      <MenuItemToggle text="Toggle" toggled={true} onToggleChange={() => {}} />
-    ),
-  },
-  {
-    name: 'MenuPicker',
-    node: <MenuPicker id="picker-1" icon={IconHome} label="Picker" />,
-  },
-  {
-    name: 'NavigationBar',
-    node: (
-      <NavigationBar
-        activeItemName="home"
-        items={[
-          { name: 'home', label: 'Home', Icon: IconHome, onClick: () => {} },
+      <Breadcrumb
+        aria-label="Workspace breadcrumb"
+        links={[
+          { children: 'Workspace', href: '/workspace' },
+          { children: 'Settings' },
         ]}
       />
     ),
   },
   {
-    name: 'NavigationBarItem',
+    name: 'ListItem icon row',
+    node: <ListItem startIcon={<IconUser />}>Menu item</ListItem>,
+  },
+  {
+    name: 'ListItem avatar row',
     node: (
-      <NavigationBarItem
-        Icon={IconHome}
-        isActive={true}
-        ariaLabel="Home"
-        onClick={() => {}}
-      />
-    ),
-  },
-  // KNOWN ISSUE (TDD): RawLink and UndecoratedLink render a react-router Link
-  // and crash because the sandbox provides no router context. Expected fix:
-  // SDK-injected Router whose navigator bridges to the host navigate API.
-  {
-    name: 'RawLink',
-    node: <RawLink href="/path">Raw link</RawLink>,
-  },
-  {
-    name: 'RoundedLink',
-    node: <RoundedLink href="https://twenty.com" label="Rounded link" />,
-  },
-  {
-    name: 'SocialLink',
-    node: (
-      <SocialLink href="https://twitter.com/twenty" type={LinkType.Twitter} />
+      <ListItem
+        startIcon={
+          <Avatar name="Avatar item" size="md" shape="rounded-square" />
+        }
+      >
+        Avatar item
+      </ListItem>
     ),
   },
   {
-    name: 'UndecoratedLink',
-    node: <UndecoratedLink to="/path">Undecorated link</UndecoratedLink>,
+    name: 'Draggable row presentation',
+    node: (
+      <ListItem
+        startIcon={
+          <>
+            <IconGripVertical />
+            <IconUser />
+          </>
+        }
+      >
+        Draggable
+      </ListItem>
+    ),
+  },
+  {
+    name: 'ListItem multiple selection',
+    node: (
+      <ListItem className="" selected={false} indicator="checkbox">
+        <OverflowingTextWithTooltip text={'Multi select'} />
+      </ListItem>
+    ),
+  },
+  {
+    name: 'ListItem multiple avatar selection',
+    node: (
+      <ListItem selected={true} indicator="checkbox">
+        <OverflowingTextWithTooltip text={'Multi avatar'} />
+      </ListItem>
+    ),
+  },
+  {
+    name: 'ListItem multiple tag selection',
+    node: (
+      <ListItem selected={false} indicator="checkbox">
+        <Tag color={'blue'}>{'Tag'}</Tag>
+      </ListItem>
+    ),
+  },
+  {
+    name: 'ListItem navigation',
+    node: (
+      <ListItem
+        startIcon={<IconUser />}
+        render={<button type="button" />}
+        hasSubmenu
+      >
+        Navigate
+      </ListItem>
+    ),
+  },
+  {
+    name: 'ListItem selection',
+    node: (
+      <ListItem selected={true} indicator="check">
+        <OverflowingTextWithTooltip text={'Select'} />
+      </ListItem>
+    ),
+  },
+  {
+    name: 'ListItem avatar selection',
+    node: (
+      <ListItem selected={true} indicator="check">
+        <OverflowingTextWithTooltip text={'Select avatar'} />
+      </ListItem>
+    ),
+  },
+  {
+    name: 'ListItem color selection',
+    node: (
+      <ListItem
+        selected={true}
+        indicator="check"
+        startIcon={<ColorSample colorName={'blue'} />}
+      >
+        <OverflowingTextWithTooltip text={DEFAULT_COLOR_LABELS['blue']} />
+      </ListItem>
+    ),
+  },
+  {
+    name: 'ListItem tag selection',
+    node: (
+      <ListItem selected={true} indicator="check">
+        <Tag color={'blue'} borderStyle="dashed" variant={'soft'}>
+          {'Select tag'}
+        </Tag>
+      </ListItem>
+    ),
   },
 ];
 
-const NavigationGallery = () => (
-  <ThemeProvider colorScheme="light">
-    <ComponentGallery
-      title="twenty-ui/navigation"
-      entries={NAVIGATION_ENTRIES}
-    />
-  </ThemeProvider>
-);
+const NavigationGallery = () => {
+  const [suggestionActivations, setSuggestionActivations] = useState(0);
+  const [pickerActivations, setPickerActivations] = useState(0);
+  const [isPickerSelected, setIsPickerSelected] = useState(false);
+
+  return (
+    <ThemeProvider colorScheme="light">
+      <ComponentGallery
+        title="twenty-ui/primitives/navigation"
+        entries={[
+          ...NAVIGATION_ENTRIES,
+          {
+            name: 'Suggestion action',
+            node: (
+              <ListItemButton
+                selected
+                startIcon={<IconUser />}
+                onClick={() => setSuggestionActivations((count) => count + 1)}
+              >
+                Suggestion
+              </ListItemButton>
+            ),
+          },
+          {
+            name: 'Picker toggle',
+            node: (
+              <Button
+                startIcon={<IconHome />}
+                aria-pressed={isPickerSelected}
+                onClick={() => {
+                  setIsPickerSelected((selected) => !selected);
+                  setPickerActivations((count) => count + 1);
+                }}
+              >
+                Picker
+              </Button>
+            ),
+          },
+          {
+            name: 'Disabled picker toggle',
+            node: (
+              <Button
+                disabled
+                aria-pressed={false}
+                onClick={() => setPickerActivations((count) => count + 1)}
+              >
+                Disabled picker
+              </Button>
+            ),
+          },
+        ]}
+      />
+      <output aria-label="Suggestion activations">
+        {suggestionActivations}
+      </output>
+      <output aria-label="Picker activations">{pickerActivations}</output>
+    </ThemeProvider>
+  );
+};
 
 export default defineFrontComponent({
   universalIdentifier: 'test-20ui0-0000-0000-0000-000000000108',
   name: 'twenty-ui-navigation-gallery',
-  description: 'Renders every twenty-ui/navigation component in the sandbox',
+  description:
+    'Renders every twenty-ui/primitives/navigation component in the sandbox',
   component: NavigationGallery,
 });

@@ -1,3 +1,6 @@
+import { findCanonicalRecordField } from '@/object-record/record-field/utils/findCanonicalRecordField';
+import { isDefined } from 'twenty-shared/utils';
+import { ApplicationStackIcon } from '@/applications/components/ApplicationStackIcon';
 import { useActiveFieldMetadataItems } from '@/object-metadata/hooks/useActiveFieldMetadataItems';
 import { getLabelIdentifierFieldMetadataItem } from '@/object-metadata/utils/getLabelIdentifierFieldMetadataItem';
 import { useObjectOptionsForBoard } from '@/object-record/object-options-dropdown/hooks/useObjectOptionsForBoard';
@@ -9,8 +12,10 @@ import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/
 import { ViewType } from '@/views/types/ViewType';
 import { useLingui } from '@lingui/react/macro';
 import { useContext } from 'react';
-import { IconEye, IconEyeOff, useIcons } from 'twenty-ui/icon';
-import { MenuItem } from 'twenty-ui/navigation';
+import { LightIconButton } from 'twenty-ui/components/input';
+import { IconEye, IconEyeOff } from 'twenty-ui/icon';
+import { useIcons } from 'twenty-ui/icon/provider';
+import { ListItem } from 'twenty-ui/primitives/navigation';
 
 type ViewFieldsSearchDropdownSectionProps = {
   searchInput: string;
@@ -48,10 +53,6 @@ export const ViewFieldsSearchDropdownSection = ({
     visibleRecordFieldsComponentSelector,
   );
 
-  const visibleFieldIds = new Set(
-    visibleRecordFields.map((recordField) => recordField.fieldMetadataItemId),
-  );
-
   const fieldMetadataItemLabelIdentifier =
     getLabelIdentifierFieldMetadataItem(objectMetadataItem);
 
@@ -67,34 +68,46 @@ export const ViewFieldsSearchDropdownSection = ({
     <DropdownMenuItemsContainer>
       {filteredFields.length > 0 ? (
         filteredFields.map((fieldMetadataItem) => {
-          const isVisible = visibleFieldIds.has(fieldMetadataItem.id);
+          const isVisible = isDefined(
+            findCanonicalRecordField({
+              recordFields: visibleRecordFields,
+              fieldMetadataItemId: fieldMetadataItem.id,
+            }),
+          );
           const isLabelIdentifier =
             fieldMetadataItem.id === fieldMetadataItemLabelIdentifier?.id;
 
           return (
-            <MenuItem
+            <ListItem
               key={fieldMetadataItem.id}
-              LeftIcon={getIcon(fieldMetadataItem.icon)}
-              iconButtons={
-                isLabelIdentifier
-                  ? undefined
-                  : [
-                      {
-                        Icon: isVisible ? IconEyeOff : IconEye,
-                        onClick: () =>
-                          handleChangeFieldVisibility({
-                            fieldMetadataId: fieldMetadataItem.id,
-                            isVisible: !isVisible,
-                          }),
-                      },
-                    ]
+              startIcon={
+                <ApplicationStackIcon
+                  Icon={getIcon(fieldMetadataItem.icon)}
+                  applicationId={fieldMetadataItem.applicationId}
+                />
               }
-              text={fieldMetadataItem.label}
-            />
+              actions={
+                isLabelIdentifier ? undefined : (
+                  <LightIconButton
+                    aria-label={isVisible ? t`Hide field` : t`Show field`}
+                    onClick={() =>
+                      handleChangeFieldVisibility({
+                        fieldMetadataId: fieldMetadataItem.id,
+                        isVisible: !isVisible,
+                      })
+                    }
+                  >
+                    {isVisible ? <IconEyeOff /> : <IconEye />}
+                  </LightIconButton>
+                )
+              }
+            >
+              {fieldMetadataItem.label}
+            </ListItem>
           );
         })
       ) : (
-        <MenuItem disabled text={t`No results`} accent="placeholder" />
+        <ListItem disabled>{t`No results`}</ListItem>
       )}
     </DropdownMenuItemsContainer>
   );

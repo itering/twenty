@@ -2,11 +2,11 @@ import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/use
 import { useApolloCoreClient } from '@/object-metadata/hooks/useApolloCoreClient';
 import { hasObjectMetadataItemPositionField } from '@/object-metadata/utils/hasObjectMetadataItemPositionField';
 import { getRecordsFromRecordConnection } from '@/object-record/cache/utils/getRecordsFromRecordConnection';
+import { type RecordGqlConnectionEdgesRequired } from '@/object-record/graphql/types/RecordGqlConnectionEdgesRequired';
 import { useGroupByRecordsQuery } from '@/object-record/hooks/useGroupByRecordsQuery';
 import { useRecordCalendarContextOrThrow } from '@/object-record/record-calendar/contexts/RecordCalendarContext';
-import { useRecordCalendarQueryDateRangeFilter } from '@/object-record/record-calendar/month/hooks/useRecordCalendarQueryDateRangeFilter';
+import { useRecordCalendarQueryDateRangeFilter } from '@/object-record/record-calendar/hooks/useRecordCalendarQueryDateRangeFilter';
 import { useRelevantRecordsGqlFields } from '@/object-record/record-field/hooks/useRelevantRecordsGqlFields';
-import { recordIndexCalendarEndFieldMetadataIdComponentState } from '@/object-record/record-index/states/recordIndexCalendarEndFieldMetadataIdComponentState';
 import { recordIndexCalendarFieldMetadataIdComponentState } from '@/object-record/record-index/states/recordIndexCalendarFieldMetadataIdComponentState';
 import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
 import { buildGroupByFieldObject } from '@/page-layout/widgets/graph/utils/buildGroupByFieldObject';
@@ -20,6 +20,10 @@ import {
 } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
+type CalendarGroupByResult = RecordGqlConnectionEdgesRequired & {
+  groupByDimensionValues?: unknown[];
+};
+
 export const useRecordCalendarGroupByRecords = (
   selectedDate: Temporal.PlainDate,
 ) => {
@@ -30,16 +34,10 @@ export const useRecordCalendarGroupByRecords = (
   const recordIndexCalendarFieldMetadataId = useAtomComponentStateValue(
     recordIndexCalendarFieldMetadataIdComponentState,
   );
-  const recordIndexCalendarEndFieldMetadataId = useAtomComponentStateValue(
-    recordIndexCalendarEndFieldMetadataIdComponentState,
-  );
 
   const recordGqlFields = useRelevantRecordsGqlFields({
     objectMetadataItem,
-    additionalFieldMetadataIds: [
-      recordIndexCalendarFieldMetadataId,
-      recordIndexCalendarEndFieldMetadataId,
-    ],
+    additionalFieldMetadataIds: [recordIndexCalendarFieldMetadataId],
   });
 
   const { dateRangeFilter } =
@@ -100,13 +98,12 @@ export const useRecordCalendarGroupByRecords = (
       return [];
     }
 
-    const allRecords = groupByResults.flatMap((group: any) =>
+    const allRecords = groupByResults.flatMap((group: CalendarGroupByResult) =>
       getRecordsFromRecordConnection<ObjectRecord>({
         recordConnection: group,
       }),
     );
 
-    // Deduplicate records by ID to prevent duplicate keys in React
     const uniqueRecordsMap = new Map<string, ObjectRecord>();
     allRecords.forEach((record: ObjectRecord) => {
       if (!uniqueRecordsMap.has(record.id)) {
@@ -122,7 +119,8 @@ export const useRecordCalendarGroupByRecords = (
       !isDefined(groupByResults)
         ? []
         : groupByResults.flatMap(
-            (group: any) => group.groupByDimensionValues || [],
+            (group: CalendarGroupByResult) =>
+              group.groupByDimensionValues || [],
           ),
     [groupByResults],
   );

@@ -7,4 +7,10 @@ export type ApplicationAccessTokenJwtPayload = CommonPropertiesJwtPayload & {
   applicationId: string;
   userWorkspaceId?: string;
   userId?: string;
+  // narrows the token's roles to the agent's; never a caller of its own
+  agentId?: string;
+  workspaceDeletionRequestTimestamp?: string;
+  // Only on tokens from the OAuth user grants; front components and logic functions get tokens no authorization backs
+  applicationAuthorizationId?: string;
+  iat?: number;
 };

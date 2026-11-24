@@ -3,6 +3,7 @@ import {
   FieldMetadataType,
   RelationType,
 } from 'twenty-shared/types';
+import { isMorphRelationHead } from 'twenty-shared/utils';
 
 import { type ColumnType } from 'typeorm';
 
@@ -87,8 +88,8 @@ export const generateCompositeColumnDefinition = ({
       columnType === 'enum'
         ? `"${schemaName}"."${computePostgresEnumName({ tableName, columnName })}"`
         : columnType,
-    isNullable:
-      parentFlatFieldMetadata.isNullable || !compositeProperty.isRequired,
+    // Required sub-fields are defaulted on read; rows are written without them.
+    isNullable: true,
     default: serializedDefaultValue,
     isArray: isArrayFlag,
     isPrimary: false,
@@ -185,6 +186,10 @@ export const generateColumnDefinitions = ({
   workspaceId: string;
   searchVectorAsExpression?: string;
 }): WorkspaceSchemaColumnDefinition[] => {
+  if (isMorphRelationHead(flatFieldMetadata)) {
+    return [];
+  }
+
   const { tableName, schemaName } = getWorkspaceSchemaContextForMigration({
     workspaceId,
     objectMetadata: flatObjectMetadata,

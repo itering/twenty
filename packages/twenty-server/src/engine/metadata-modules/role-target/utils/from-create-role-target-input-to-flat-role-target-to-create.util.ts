@@ -1,3 +1,4 @@
+import { getSystemSideEffectRoleTargetUniversalIdentifier } from 'twenty-shared/application';
 import { isDefined } from 'twenty-shared/utils';
 import { v4 } from 'uuid';
 
@@ -15,6 +16,7 @@ export const fromCreateRoleTargetInputToFlatRoleTargetToCreate = ({
   flatRoleTargetMaps,
   flatRoleMaps,
   flatAgentMaps,
+  flatWebhookMaps,
   flatApplication,
 }: {
   createRoleTargetInput: CreateRoleTargetInput;
@@ -22,7 +24,7 @@ export const fromCreateRoleTargetInputToFlatRoleTargetToCreate = ({
   flatApplication: FlatApplication;
 } & Pick<
   AllFlatEntityMaps,
-  'flatRoleTargetMaps' | 'flatRoleMaps' | 'flatAgentMaps'
+  'flatRoleTargetMaps' | 'flatRoleMaps' | 'flatAgentMaps' | 'flatWebhookMaps'
 >): {
   flatRoleTargetToCreate: FlatRoleTarget;
   flatRoleTargetsToDelete: FlatRoleTarget[];
@@ -30,6 +32,12 @@ export const fromCreateRoleTargetInputToFlatRoleTargetToCreate = ({
   const now = new Date();
   const { roleId, targetId, targetMetadataForeignKey, universalIdentifier } =
     createRoleTargetInput;
+
+  const isSystemSideEffect =
+    findFlatEntityByIdInFlatEntityMapsOrThrow({
+      flatEntityMaps: flatRoleMaps,
+      flatEntityId: roleId,
+    }).isSystemSideEffect === true;
 
   const { roleUniversalIdentifier } = resolveEntityRelationUniversalIdentifiers(
     {
@@ -47,28 +55,51 @@ export const fromCreateRoleTargetInputToFlatRoleTargetToCreate = ({
         }).universalIdentifier
       : null;
 
+  const webhookUniversalIdentifier =
+    targetMetadataForeignKey === 'webhookId'
+      ? findFlatEntityByIdInFlatEntityMapsOrThrow({
+          flatEntityMaps: flatWebhookMaps,
+          flatEntityId: targetId,
+        }).universalIdentifier
+      : null;
+
   const flatRoleTargetToCreate: FlatRoleTarget = {
     id: v4(),
     roleId,
     roleUniversalIdentifier,
     userWorkspaceId: null,
+    isSystemSideEffect,
     agentId: null,
     agentUniversalIdentifier,
     apiKeyId: null,
+    webhookId: null,
+    webhookUniversalIdentifier,
+    targetApplicationId: null,
+    targetApplicationUniversalIdentifier: null,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
-    universalIdentifier: universalIdentifier ?? v4(),
+    universalIdentifier:
+      universalIdentifier ??
+      (isSystemSideEffect
+        ? getSystemSideEffectRoleTargetUniversalIdentifier({
+            applicationUniversalIdentifier: flatApplication.universalIdentifier,
+            roleUniversalIdentifier,
+            targetId,
+          })
+        : v4()),
     workspaceId,
     applicationId: flatApplication.id,
     applicationUniversalIdentifier: flatApplication.universalIdentifier,
     [targetMetadataForeignKey]: targetId,
   };
 
-  const flatRoleTargetToDelete = findFlatRoleTargetFromForeignKey({
-    flatRoleTargetMaps,
-    targetMetadataForeignKey,
-    targetId,
-  });
+  const flatRoleTargetToDelete = isSystemSideEffect
+    ? undefined
+    : findFlatRoleTargetFromForeignKey({
+        flatRoleTargetMaps,
+        targetMetadataForeignKey,
+        targetId,
+      });
 
   return {
     flatRoleTargetToCreate: flatRoleTargetToCreate,

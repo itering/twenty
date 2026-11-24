@@ -1,5 +1,6 @@
 import { createManyOperationFactory } from 'test/integration/graphql/utils/create-many-operation-factory.util';
-import { makeGraphqlAPIRequest } from 'test/integration/graphql/utils/make-graphql-api-request.util';
+import { deleteManyOperationFactory } from 'test/integration/graphql/utils/delete-many-operation-factory.util';
+import { makeGraphqlApiRequest } from 'test/integration/graphql/utils/make-graphql-api-request.util';
 import { buildBaseManifest } from 'test/integration/metadata/suites/application/utils/build-base-manifest.util';
 import { buildDefaultObjectManifest } from 'test/integration/metadata/suites/application/utils/build-default-object-manifest.util';
 import { cleanupApplicationAndAppRegistration } from 'test/integration/metadata/suites/application/utils/cleanup-application-and-app-registration.util';
@@ -176,7 +177,7 @@ const GQL_FIELDS = `
 `;
 
 const upsertRecords = (data: object[], upsert: boolean) =>
-  makeGraphqlAPIRequest(
+  makeGraphqlApiRequest(
     createManyOperationFactory({
       objectMetadataSingularName: OBJECT.nameSingular,
       objectMetadataPluralName: OBJECT.namePlural,
@@ -204,7 +205,7 @@ const DUAL_GQL_FIELDS = `
 `;
 
 const upsertDualRecords = (data: object[], upsert: boolean) =>
-  makeGraphqlAPIRequest(
+  makeGraphqlApiRequest(
     createManyOperationFactory({
       objectMetadataSingularName: DUAL_OBJECT.nameSingular,
       objectMetadataPluralName: DUAL_OBJECT.namePlural,
@@ -214,7 +215,9 @@ const upsertDualRecords = (data: object[], upsert: boolean) =>
     }),
   );
 
-const getDualRecords = (response: { body: { data: Record<string, unknown> } }) =>
+const getDualRecords = (response: {
+  body: { data: Record<string, unknown> };
+}) =>
   response.body.data.createDualCompositeUpsertRecords as {
     id: string;
     aFirstKey: string;
@@ -255,7 +258,6 @@ describe('upsert with composite unique index', () => {
     expect(created.id).toBe(recordId);
     expect(created.payload).toBe('original');
 
-
     const upserted = getRecords(
       await upsertRecords(
         [{ firstKey: 'A', secondKey: 'B', payload: 'updated' }],
@@ -290,6 +292,35 @@ describe('upsert with composite unique index', () => {
     expect(upserted[0].id).toBe(newId);
     expect(upserted[0].id).not.toBe(created.id);
     expect(upserted[0].payload).toBe('second');
+  }, 60000);
+
+  it('restores a soft-deleted record matched on an index that covers deleted records', async () => {
+    const created = getRecords(
+      await upsertRecords(
+        [{ firstKey: 'E', secondKey: 'F', payload: 'original' }],
+        false,
+      ),
+    )[0];
+
+    await makeGraphqlApiRequest(
+      deleteManyOperationFactory({
+        objectMetadataSingularName: OBJECT.nameSingular,
+        objectMetadataPluralName: OBJECT.namePlural,
+        gqlFields: 'id',
+        filter: { id: { in: [created.id] } },
+      }),
+    );
+
+    const upserted = getRecords(
+      await upsertRecords(
+        [{ firstKey: 'E', secondKey: 'F', payload: 'restored' }],
+        true,
+      ),
+    );
+
+    expect(upserted).toHaveLength(1);
+    expect(upserted[0].id).toBe(created.id);
+    expect(upserted[0].payload).toBe('restored');
   }, 60000);
 
   describe('with two composite unique indexes', () => {

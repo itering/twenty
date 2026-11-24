@@ -14,7 +14,7 @@ import { type GenerateSignedDpaResult } from 'src/engine/core-modules/dpa/dtos/g
 import { DpaAgreementEntity } from 'src/engine/core-modules/dpa/entities/dpa-agreement.entity';
 import { DpaAgreementType } from 'src/engine/core-modules/dpa/enums/dpa-agreement-type.enum';
 import { DpaRegionService } from 'src/engine/core-modules/dpa/services/dpa-region.service';
-import { type ResolvedDpa } from 'src/engine/core-modules/dpa/types/dpa.types';
+import { type ResolvedDpa } from 'src/engine/core-modules/dpa/types/dpa.type';
 import { buildDpaAgreementRecord } from 'src/engine/core-modules/dpa/utils/build-dpa-agreement-record.util';
 import { resolveDpa } from 'src/engine/core-modules/dpa/utils/resolve-dpa.util';
 import { renderDpaToPdfBuffer } from 'src/engine/core-modules/dpa/pdf/render-dpa-to-pdf.util';
@@ -63,7 +63,7 @@ export class DpaService {
 
   // Keys off IS_MULTIWORKSPACE_ENABLED, not billing — using billing here misclassified cloud as self-hosted.
   private isSelfHosted(): boolean {
-    return this.twentyConfigService.get('IS_MULTIWORKSPACE_ENABLED') !== true;
+    return !this.twentyConfigService.get('IS_MULTIWORKSPACE_ENABLED');
   }
 
   getPreviewForWorkspace(

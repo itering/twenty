@@ -3,6 +3,8 @@ title: Profile Settings
 description: Manage your personal profile and security settings.
 ---
 
+import { PageBanner } from "/snippets/page-banner.mdx"
+
 ## Personal Information
 
 ### Name and Email
@@ -18,6 +20,14 @@ Enable 2FA to add an extra layer of security to your account:
 2. Click **Authenticator app**
 3. Scan the QR code with your authenticator app
 4. Enter the verification code to confirm
+
+### Lost Your Authenticator
+If you can't access your authenticator app, ask a workspace admin for a recovery code. The code works once and expires after 1 hour by default. Then:
+1. Sign in with your email and password
+2. On the verification screen, click **Lost your authenticator? Use a recovery code**
+3. Enter the recovery code and click **Continue**
+
+Your current authenticator for that workspace is removed and your other sessions are signed out. Set up two-factor authentication again from **Settings → Profile**.
 
 ### Password Management
 - **Change Password**: Update your current password
@@ -35,3 +45,5 @@ To delete your account:
 2. Scroll to **Danger Zone**
 3. Click **Delete Account**
 4. Confirm by typing your email address
+
+<PageBanner illustration="page-cover-profile" />

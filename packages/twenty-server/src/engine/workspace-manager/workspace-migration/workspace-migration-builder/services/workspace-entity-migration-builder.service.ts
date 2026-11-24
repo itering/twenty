@@ -1,9 +1,13 @@
 import { Inject } from '@nestjs/common';
 
+import { msg } from '@lingui/core/macro';
+import {
+  isValidUniversalIdentifier,
+  MINIMUM_UNIVERSAL_IDENTIFIER_UUID_VERSION,
+} from 'twenty-shared/application';
 import { type AllMetadataName } from 'twenty-shared/metadata';
 import { type FromTo } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
-import { validate as uuidValidate, version as uuidVersion } from 'uuid';
 
 import { LoggerService } from 'src/engine/core-modules/logger/logger.service';
 import { WORKSPACE_MIGRATION_DURATION_MS_BUCKET_BOUNDARIES } from 'src/engine/core-modules/metrics/constants/workspace-migration-duration-ms-bucket-boundaries.constant';
@@ -37,14 +41,15 @@ import { topologicallySortUniversalFlatEntitiesForSelfReferentialFks } from 'src
 import { FlatEntityValidationError } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/builders/types/failed-flat-entity-validation.type';
 import { FailedFlatEntityValidateAndBuild } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/types/failed-flat-entity-validate-and-build.type';
 import { SuccessfulFlatEntityValidateAndBuild } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/types/successful-flat-entity-validate-and-build.type';
+import { type FlatEntityCreationValidationArgs } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/types/universal-flat-entity-creation-validation-args.type';
 import { FlatEntityUpdateValidationArgs } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/types/universal-flat-entity-update-validation-args.type';
 import { UniversalFlatEntityValidationArgs } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/types/universal-flat-entity-validation-args.type';
 import { UniversalFlatEntityValidationReturnType } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/types/universal-flat-entity-validation-result.type';
-import { AllUniversalWorkspaceMigrationAction } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/types/workspace-migration-action-common';
-import { type WorkspaceMigrationBuilderOptions } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/types/workspace-migration-builder-options.type';
+import { AllUniversalWorkspaceMigrationAction } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/types/workspace-migration-action-common.type';
+import { type WorkspaceMigrationValidationBuildOptions } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/types/workspace-migration-builder-options.type';
 
 export type ValidateAndBuildArgs<T extends AllMetadataName> = {
-  buildOptions: WorkspaceMigrationBuilderOptions;
+  buildOptions: WorkspaceMigrationValidationBuildOptions;
   dependencyOptimisticFlatEntityMaps: AllUniversalFlatEntityMaps;
   workspaceId: string;
   additionalCacheDataMaps: WorkspaceMigrationBuilderAdditionalCacheDataMaps;
@@ -219,6 +224,14 @@ export abstract class WorkspaceEntityMigrationBuilderService<
 
     const creationValidationStart = performance.now();
 
+    const finalFlatEntityMaps: MetadataUniversalFlatEntityMaps<T> = {
+      byUniversalIdentifier: {
+        ...optimisticFlatEntityMapsAndRelatedFlatEntityMaps[flatEntityMapsKey]
+          .byUniversalIdentifier,
+        ...toFlatEntityMaps.byUniversalIdentifier,
+      },
+    };
+
     const remainingFlatEntityMapsToCreate = structuredClone(
       createdFlatEntityMaps,
     );
@@ -253,6 +266,7 @@ export abstract class WorkspaceEntityMigrationBuilderService<
       );
 
       const validationResult = await this.innerValidateFlatEntityCreation({
+        finalFlatEntityMaps,
         additionalCacheDataMaps,
         flatEntityToValidate: universalFlatEntityToCreate,
         workspaceId,
@@ -320,6 +334,7 @@ export abstract class WorkspaceEntityMigrationBuilderService<
       }
 
       const validationResult = await this.validateFlatEntityUpdate({
+        finalFlatEntityMaps,
         flatEntityUpdate: flatEntityUpdate.update,
         optimisticFlatEntityMapsAndRelatedFlatEntityMaps,
         workspaceId,
@@ -327,9 +342,27 @@ export abstract class WorkspaceEntityMigrationBuilderService<
         additionalCacheDataMaps,
         universalIdentifier: flatEntityToUpdateUniversalIdentifier,
       });
+      const divergenceErrors = this.validateNoNonUpdatablePropertyDivergence(
+        flatEntityUpdate.nonUpdatablePropertyDivergences,
+      );
 
       if (validationResult.status === 'fail') {
-        allValidationResult.push(validationResult);
+        allValidationResult.push({
+          ...validationResult,
+          errors: [...validationResult.errors, ...divergenceErrors],
+        });
+        continue;
+      }
+
+      if (divergenceErrors.length > 0) {
+        allValidationResult.push({
+          flatEntityMinimalInformation: {
+            universalIdentifier: flatEntityToUpdateUniversalIdentifier,
+          } as Partial<MetadataFlatEntity<T>>,
+          errors: divergenceErrors,
+          metadataName: this.metadataName,
+          type: 'update',
+        });
         continue;
       }
 
@@ -462,17 +495,24 @@ export abstract class WorkspaceEntityMigrationBuilderService<
     });
   }
 
+  private validateNoNonUpdatablePropertyDivergence(
+    nonUpdatablePropertyDivergences: string[],
+  ): FlatEntityValidationError[] {
+    return nonUpdatablePropertyDivergences.map((property) => ({
+      code: 'NON_UPDATABLE_PROPERTY_DIVERGENCE',
+      message: `${this.metadataName} property "${property}" cannot be updated`,
+      userFriendlyMessage: msg`Property ${property} cannot be updated`,
+    }));
+  }
+
   private validateUniversalIdentifier({
     flatEntityToValidate: { universalIdentifier },
   }: UniversalFlatEntityValidationArgs<T>): FlatEntityValidationError[] {
-    if (
-      !uuidValidate(universalIdentifier) ||
-      uuidVersion(universalIdentifier) < 4
-    ) {
+    if (!isValidUniversalIdentifier(universalIdentifier)) {
       return [
         {
           code: FlatEntityMapsExceptionCode.ENTITY_MALFORMED,
-          message: `Invalid universalIdentifier: "${universalIdentifier}" is not a valid UUID, uuid version should be greater than 4`,
+          message: `Invalid universalIdentifier: "${universalIdentifier}" is not a valid UUID, uuid version should be greater than ${MINIMUM_UNIVERSAL_IDENTIFIER_UUID_VERSION}`,
           value: universalIdentifier,
         },
       ];
@@ -518,7 +558,7 @@ export abstract class WorkspaceEntityMigrationBuilderService<
   }
 
   private async innerValidateFlatEntityCreation(
-    args: UniversalFlatEntityValidationArgs<T>,
+    args: FlatEntityCreationValidationArgs<T>,
   ): Promise<UniversalFlatEntityValidationReturnType<T, 'create'>> {
     const uuidValidationResult = this.validateUniversalIdentifier(args);
     const perTypeExistenceResult =
@@ -560,7 +600,7 @@ export abstract class WorkspaceEntityMigrationBuilderService<
   }
 
   protected abstract validateFlatEntityCreation(
-    args: UniversalFlatEntityValidationArgs<T>,
+    args: FlatEntityCreationValidationArgs<T>,
   ):
     | UniversalFlatEntityValidationReturnType<T, 'create'>
     | Promise<UniversalFlatEntityValidationReturnType<T, 'create'>>;

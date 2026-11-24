@@ -17,19 +17,19 @@ export const useTriggerProviderReconnect = () => {
     ) => {
       if (provider === ConnectedAccountProvider.IMAP_SMTP_CALDAV) {
         if (!accountId) {
-          navigate(SettingsPath.NewImapSmtpCaldavConnection);
+          navigate(SettingsPath.AppPreferencesNewImapSmtpCaldavConnection);
           return;
         }
 
-        navigate(SettingsPath.EditImapSmtpCaldavConnection, {
+        navigate(SettingsPath.AppPreferencesEditImapSmtpCaldavConnection, {
           connectedAccountId: accountId,
         });
         return;
       }
 
       await triggerApisOAuth(provider, {
+        redirectLocation: getSettingsPath(SettingsPath.AppPreferences),
         ...options,
-        redirectLocation: getSettingsPath(SettingsPath.Accounts),
       });
     },
     [triggerApisOAuth, navigate],

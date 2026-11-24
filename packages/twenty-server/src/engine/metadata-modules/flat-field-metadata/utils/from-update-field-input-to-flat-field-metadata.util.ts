@@ -26,6 +26,7 @@ type FromUpdateFieldInputToFlatFieldMetadataArgs = {
   updateFieldInput: UpdateFieldInput;
   flatApplication: FlatApplication;
   isSystemBuild: boolean;
+  workspaceCustomApplicationUniversalIdentifier: string;
 } & Pick<
   AllFlatEntityMaps,
   | 'flatObjectMetadataMaps'
@@ -35,6 +36,8 @@ type FromUpdateFieldInputToFlatFieldMetadataArgs = {
   | 'flatViewGroupMaps'
   | 'flatViewMaps'
   | 'flatViewFieldMaps'
+  | 'flatViewSortMaps'
+  | 'flatFieldMetadataOptionMaps'
 >;
 
 type FlatFieldMetadataAndIndexToUpdate = {
@@ -51,7 +54,10 @@ export const fromUpdateFieldInputToFlatFieldMetadata = ({
   flatViewGroupMaps,
   flatViewMaps,
   flatViewFieldMaps,
+  flatViewSortMaps,
+  flatFieldMetadataOptionMaps,
   isSystemBuild,
+  workspaceCustomApplicationUniversalIdentifier,
 }: FromUpdateFieldInputToFlatFieldMetadataArgs): FieldInputTranspilationResult<FlatFieldMetadataAndIndexToUpdate> => {
   const updateFieldInputInformalProperties =
     extractAndSanitizeObjectStringFields(rawUpdateFieldInput, [
@@ -98,10 +104,12 @@ export const fromUpdateFieldInputToFlatFieldMetadata = ({
   const { flatFieldMetadataFromTo, relatedFlatFieldMetadatasFromTo } =
     computeFlatFieldToUpdateAndRelatedFlatFieldToUpdate({
       flatFieldMetadataMaps,
+      flatFieldMetadataOptionMaps,
       flatObjectMetadata,
       fromFlatFieldMetadata: existingFlatFieldMetadataToUpdate,
       rawUpdateFieldInput,
       isSystemBuild,
+      workspaceCustomApplicationUniversalIdentifier,
     });
 
   const { flatFieldMetadatasToCreate, flatIndexMetadatasToCreate } =
@@ -150,6 +158,8 @@ export const fromUpdateFieldInputToFlatFieldMetadata = ({
       toFlatFieldMetadata,
       flatViewMaps,
       flatViewFieldMaps,
+      flatViewSortMaps,
+      flatFieldMetadataOptionMaps,
     });
 
     if (sideEffectResult.status === 'fail') {
@@ -170,6 +180,7 @@ export const fromUpdateFieldInputToFlatFieldMetadata = ({
       flatIndexMetadatasToDelete,
       flatViewsToDelete,
       flatViewFieldsToDelete,
+      flatViewSortsToDelete,
       flatViewsToUpdate,
     } = sideEffectResult.result;
 
@@ -218,6 +229,10 @@ export const fromUpdateFieldInputToFlatFieldMetadata = ({
       flatViewFieldsToDelete: [
         ...accumulator.flatViewFieldsToDelete,
         ...flatViewFieldsToDelete,
+      ],
+      flatViewSortsToDelete: [
+        ...accumulator.flatViewSortsToDelete,
+        ...flatViewSortsToDelete,
       ],
       flatViewsToUpdate: [
         ...accumulator.flatViewsToUpdate,

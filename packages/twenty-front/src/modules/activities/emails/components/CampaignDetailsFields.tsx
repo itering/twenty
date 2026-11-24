@@ -1,66 +1,37 @@
 import { styled } from '@linaria/react';
-import { t } from '@lingui/core/macro';
+import { useId } from 'react';
 import {
-  CoreObjectNameSingular,
+  StandardObjectNameSingular,
   MessageChannelType,
 } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
-import { type SelectOption } from 'twenty-ui/input';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { InlineBanner } from 'twenty-ui/components/feedback';
+import { IconAlertTriangle } from 'twenty-ui/icon';
+import { Avatar } from 'twenty-ui/primitives/data-display';
+import { type SelectOption } from 'twenty-ui/primitives/input';
+import { themeCssVariables } from 'twenty-ui/theme';
 
-import { useCampaignAudiencePreview } from '@/activities/emails/hooks/useCampaignAudiencePreview';
+import { ComposerFieldRow } from '@/activities/components/ComposerFieldRow';
+import { CampaignEnvelopeBox } from '@/activities/emails/components/CampaignEnvelopeBox';
+import { CampaignVariablePicker } from '@/activities/emails/components/CampaignVariablePicker';
 import { useCampaignDetailsState } from '@/activities/emails/hooks/useCampaignDetailsState';
 import { useUnsubscribeTopics } from '@/activities/emails/hooks/useUnsubscribeTopics';
 import { type MessageCampaign } from '@/activities/emails/types/MessageCampaign';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
-import { FormSingleRecordPicker } from '@/object-record/record-field/ui/form-types/components/FormSingleRecordPicker';
 import { FormTextFieldInput } from '@/object-record/record-field/ui/form-types/components/FormTextFieldInput';
 import { useMyMessageChannels } from '@/settings/accounts/hooks/useMyMessageChannels';
+import { FormSingleRecordPicker } from '@/object-record/record-field/ui/form-types/components/FormSingleRecordPicker';
 import { Select } from '@/ui/input/components/Select';
+import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
+import { useOpenDropdown } from '@/ui/layout/dropdown/hooks/useOpenDropdown';
+import { useLingui } from '@lingui/react/macro';
 
-const StyledFieldsContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: ${themeCssVariables.spacing[1]};
-  padding: ${themeCssVariables.spacing[3]} ${themeCssVariables.spacing[2]};
+const StyledWarningContainer = styled.div`
+  padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[3]};
 `;
 
-const StyledHint = styled.div`
-  color: ${themeCssVariables.font.color.tertiary};
-  font-size: ${themeCssVariables.font.size.xs};
-  padding: ${themeCssVariables.spacing[1]} 0;
-`;
-
-type CampaignAudiencePreview = NonNullable<
-  ReturnType<typeof useCampaignAudiencePreview>
->;
-
-const buildAudienceHint = (preview: CampaignAudiencePreview): string => {
-  const parts: string[] = [];
-
-  if (preview.withoutEmail > 0) {
-    parts.push(t`${preview.withoutEmail} without email`);
-  }
-  if (preview.duplicateEmails > 0) {
-    parts.push(t`${preview.duplicateEmails} duplicate`);
-  }
-  if (preview.globallyUnsubscribed > 0) {
-    parts.push(t`${preview.globallyUnsubscribed} unsubscribed from everything`);
-  }
-  if (preview.topicUnsubscribed > 0) {
-    parts.push(t`${preview.topicUnsubscribed} opted out of this topic`);
-  }
-
-  if (parts.length === 0) {
-    return t`${preview.totalMembers} in this list`;
-  }
-
-  const breakdown = parts.join(', ');
-
-  // Without exclusions every member is sendable, so the count is only worth
-  // spelling out when the two differ.
-  return t`${preview.totalMembers} in this list, ${preview.sendable} sendable (${breakdown})`;
-};
+const FROM_DROPDOWN_ID = 'campaign-composer-from-account';
+const UNSUBSCRIBE_TOPIC_DROPDOWN_ID = 'campaign-composer-unsubscribe-topic';
 
 type CampaignDetailsFieldsProps = {
   campaign: MessageCampaign;
@@ -69,12 +40,18 @@ type CampaignDetailsFieldsProps = {
 export const CampaignDetailsFields = ({
   campaign,
 }: CampaignDetailsFieldsProps) => {
+  const { t } = useLingui();
   const detailsState = useCampaignDetailsState({ campaign });
+  const instanceId = useId();
+  const listDropdownId = `campaign-list-picker-${instanceId}`;
+  const { openDropdown } = useOpenDropdown();
 
+  const openDropdownById = (dropdownId: string) =>
+    openDropdown({ dropdownComponentInstanceIdFromProps: dropdownId });
   const { channels } = useMyMessageChannels();
   const { unsubscribeTopics } = useUnsubscribeTopics();
   const { createOneRecord: createMessageList } = useCreateOneRecord({
-    objectNameSingular: CoreObjectNameSingular.MessageList,
+    objectNameSingular: StandardObjectNameSingular.MessageList,
   });
 
   const handleCreateList = async (searchInput?: string) => {
@@ -88,11 +65,6 @@ export const CampaignDetailsFields = ({
     }
   };
 
-  const audiencePreview = useCampaignAudiencePreview({
-    listId: detailsState.listId,
-    unsubscribeTopicId: detailsState.unsubscribeTopicId,
-  });
-
   const senderOptions: SelectOption<string>[] = channels
     .filter((channel) => channel.type === MessageChannelType.EMAIL_GROUP)
     .map((channel) => channel.connectedAccount?.handle)
@@ -100,59 +72,122 @@ export const CampaignDetailsFields = ({
     .map((handle) => ({ label: handle, value: handle }));
 
   const topicOptions: SelectOption<string>[] = unsubscribeTopics.map(
-    (topic) => ({
-      label: topic.name ?? t`Untitled topic`,
-      value: topic.id,
-    }),
+    (topic) => {
+      const topicName = topic.name ?? t`Untitled topic`;
+
+      return {
+        label: topicName,
+        value: topic.id,
+        LeftComponent: (
+          <Avatar
+            colorSeed={topic.id}
+            name={topicName}
+            size="md"
+            shape="circle"
+          />
+        ),
+      };
+    },
   );
 
+  const hasTopicOptions = topicOptions.length > 0;
+  const hasSenderOptions = senderOptions.length > 0;
+
+  const isSenderSelectDisabled =
+    senderOptions.length <= 1 &&
+    senderOptions.some((option) => option.value === detailsState.fromAddress);
+  const isTopicSelectDisabled =
+    topicOptions.length <= 1 &&
+    topicOptions.some(
+      (option) => option.value === detailsState.unsubscribeTopicId,
+    );
+
   return (
-    <StyledFieldsContainer onBlur={() => detailsState.flush()}>
-      <FormTextFieldInput
-        key={`subject-${detailsState.draftResyncKey}`}
-        label={t`Subject`}
-        defaultValue={detailsState.subject}
-        onChange={detailsState.setSubject}
-        placeholder={t`Subject`}
-      />
-      <Select
-        dropdownId="campaign-composer-from-account"
+    <CampaignEnvelopeBox
+      onBlur={() => detailsState.flush()}
+      below={
+        !hasSenderOptions && (
+          <StyledWarningContainer>
+            <InlineBanner
+              embedded
+              status="error"
+              icon={<IconAlertTriangle aria-hidden="true" />}
+            >{t`No sending address. Connect a verified domain in Settings.`}</InlineBanner>
+          </StyledWarningContainer>
+        )
+      }
+    >
+      <ComposerFieldRow
         label={t`From`}
-        fullWidth
-        value={detailsState.fromAddress}
-        options={senderOptions}
-        emptyOption={{ label: t`Select a sender`, value: '' }}
-        onChange={detailsState.setFromAddress}
-      />
-      <FormSingleRecordPicker
-        key={`list-${detailsState.draftResyncKey}`}
+        onClick={
+          isSenderSelectDisabled
+            ? undefined
+            : () => openDropdownById(FROM_DROPDOWN_ID)
+        }
+      >
+        <Select
+          dropdownId={FROM_DROPDOWN_ID}
+          dropdownWidth={GenericDropdownContentWidth.ExtraLarge}
+          fullWidth
+          variant="transparent"
+          value={detailsState.fromAddress}
+          options={senderOptions}
+          emptyOption={{ label: t`Select a sender`, value: '' }}
+          onChange={detailsState.setFromAddress}
+        />
+      </ComposerFieldRow>
+      <ComposerFieldRow
         label={t`To`}
-        objectNameSingulars={[CoreObjectNameSingular.MessageList]}
-        defaultValue={detailsState.listId}
-        onChange={detailsState.setListId}
-        onCreate={handleCreateList}
-      />
-      {isDefined(audiencePreview) && (
-        <StyledHint>{buildAudienceHint(audiencePreview)}</StyledHint>
-      )}
-      {topicOptions.length > 0 && (
-        <>
+        onClick={() => openDropdownById(listDropdownId)}
+      >
+        <FormSingleRecordPicker
+          key={`list-${detailsState.draftResyncKey}`}
+          dropdownId={listDropdownId}
+          variant="transparent"
+          objectNameSingulars={[StandardObjectNameSingular.MessageList]}
+          defaultValue={detailsState.listId}
+          onChange={detailsState.setListId}
+          onCreate={handleCreateList}
+        />
+      </ComposerFieldRow>
+      {hasTopicOptions && (
+        <ComposerFieldRow
+          label={t`Topic`}
+          onClick={
+            isTopicSelectDisabled
+              ? undefined
+              : () => openDropdownById(UNSUBSCRIBE_TOPIC_DROPDOWN_ID)
+          }
+        >
           <Select
-            dropdownId="campaign-composer-unsubscribe-topic"
-            label={t`Unsubscribe topic`}
+            dropdownId={UNSUBSCRIBE_TOPIC_DROPDOWN_ID}
+            dropdownWidth={GenericDropdownContentWidth.ExtraLarge}
             fullWidth
+            variant="transparent"
             value={detailsState.unsubscribeTopicId ?? ''}
             options={topicOptions}
-            emptyOption={{ label: t`No topic`, value: '' }}
+            showIconInControl={false}
+            emptyOption={{
+              label: t`No topic`,
+              value: '',
+            }}
             onChange={(value) =>
               detailsState.setUnsubscribeTopicId(value === '' ? null : value)
             }
           />
-          <StyledHint>
-            {t`The unsubscribe topic this email belongs to. Recipients who opted out of it are skipped, and the unsubscribe link is scoped to it.`}
-          </StyledHint>
-        </>
+        </ComposerFieldRow>
       )}
-    </StyledFieldsContainer>
+      <ComposerFieldRow label={t`Subject`} hasDivider={false}>
+        <FormTextFieldInput
+          key={`subject-${detailsState.draftResyncKey}`}
+          ariaLabel={t`Subject`}
+          placeholder={t`Add a subject`}
+          defaultValue={detailsState.subject}
+          onChange={detailsState.setSubject}
+          VariablePicker={CampaignVariablePicker}
+          enableTemplateVariableFallback
+        />
+      </ComposerFieldRow>
+    </CampaignEnvelopeBox>
   );
 };

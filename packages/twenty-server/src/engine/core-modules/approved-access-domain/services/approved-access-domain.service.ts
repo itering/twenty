@@ -20,6 +20,7 @@ import { JwtTokenTypeEnum } from 'src/engine/core-modules/auth/types/jwt-token-t
 import { WorkspaceDomainsService } from 'src/engine/core-modules/domain/workspace-domains/services/workspace-domains.service';
 import { EmailService } from 'src/engine/core-modules/email/email.service';
 import { FileUrlService } from 'src/engine/core-modules/file/file-url/file-url.service';
+import { I18nService } from 'src/engine/core-modules/i18n/i18n.service';
 import { JwtWrapperService } from 'src/engine/core-modules/jwt/services/jwt-wrapper.service';
 import { decodeJwtHeader } from 'src/engine/core-modules/jwt/utils/decode-jwt-header.util';
 import { isAsymmetricJwtHeader } from 'src/engine/core-modules/jwt/utils/is-asymmetric-jwt-header.util';
@@ -47,6 +48,7 @@ export class ApprovedAccessDomainService {
     private readonly fileUrlService: FileUrlService,
     private readonly workspaceDomainsService: WorkspaceDomainsService,
     private readonly jwtWrapperService: JwtWrapperService,
+    private readonly i18nService: I18nService,
   ) {}
 
   async sendApprovedAccessDomainValidationEmail(
@@ -120,10 +122,12 @@ export class ApprovedAccessDomainService {
       plainText: true,
     });
 
+    const i18n = this.i18nService.getI18nInstance(sender.locale);
+
     await this.emailService.send({
       from: `${sender.name.firstName} ${sender.name.lastName} (via Twenty) <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
       to,
-      subject: 'Approve your access domain',
+      subject: i18n._(msg`Approve your access domain`),
       text,
       html,
     });
@@ -230,10 +234,13 @@ export class ApprovedAccessDomainService {
       );
     }
 
-    return this.approvedAccessDomainRepository.save(
+    await this.approvedAccessDomainRepository.update(
       approvedAccessDomain.workspaceId,
-      { ...approvedAccessDomain, isValidated: true },
+      { id: approvedAccessDomain.id },
+      { isValidated: true },
     );
+
+    return { ...approvedAccessDomain, isValidated: true };
   }
 
   async createApprovedAccessDomain(
@@ -264,10 +271,11 @@ export class ApprovedAccessDomainService {
       );
     }
 
-    const approvedAccessDomain = await this.approvedAccessDomainRepository.save(
-      inWorkspace.id,
-      { domain },
-    );
+    const approvedAccessDomain =
+      await this.approvedAccessDomainRepository.insertAndReturnOne(
+        inWorkspace.id,
+        { domain },
+      );
 
     await this.sendApprovedAccessDomainValidationEmail(
       fromWorkspaceMember,
@@ -299,13 +307,13 @@ export class ApprovedAccessDomainService {
     return this.approvedAccessDomainRepository.find(workspace.id);
   }
 
-  async findValidatedApprovedAccessDomainWithWorkspacesAndSSOIdentityProvidersDomain(
+  async findValidatedApprovedAccessDomainWithWorkspacesAndSsoIdentityProvidersDomain(
     domain: string,
   ) {
     return this.approvedAccessDomainRepositoryUnscoped.find({
       relations: [
         'workspace',
-        'workspace.workspaceSSOIdentityProviders',
+        'workspace.workspaceSsoIdentityProviders',
         'workspace.approvedAccessDomains',
       ],
       where: {

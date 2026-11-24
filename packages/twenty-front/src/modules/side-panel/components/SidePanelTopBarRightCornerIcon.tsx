@@ -1,16 +1,13 @@
-import { useSwitchToNewAiChat } from '@/ai/hooks/useSwitchToNewAiChat';
 import { SidePanelObjectFilterDropdown } from '@/side-panel/components/SidePanelObjectFilterDropdown';
-import { sidePanelPageState } from '@/side-panel/states/sidePanelPageState';
+import { SidePanelAskAiNewChatButton } from '@/side-panel/pages/ask-ai/components/SidePanelAskAiNewChatButton';
+import { sidePanelPageInfoSelector } from '@/side-panel/states/sidePanelPageInfoSelector';
 import { sidePanelSearchObjectFilterState } from '@/side-panel/states/sidePanelSearchObjectFilterState';
 import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { styled } from '@linaria/react';
-import { t } from '@lingui/core/macro';
 import { SidePanelPages } from 'twenty-shared/types';
-import { IconEdit } from 'twenty-ui/icon';
-import { IconButton } from 'twenty-ui/input';
 import { useIsMobile } from 'twenty-ui/utilities';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 const StyledIconButtonContainer = styled.div`
   color: ${themeCssVariables.font.color.secondary};
@@ -18,8 +15,7 @@ const StyledIconButtonContainer = styled.div`
 
 export const SidePanelTopBarRightCornerIcon = () => {
   const isMobile = useIsMobile();
-  const sidePanelPage = useAtomStateValue(sidePanelPageState);
-  const { switchToNewChat } = useSwitchToNewAiChat();
+  const sidePanelPage = useAtomStateValue(sidePanelPageInfoSelector).page;
   const [sidePanelSearchObjectFilter, setSidePanelSearchObjectFilter] =
     useAtomState(sidePanelSearchObjectFilterState);
 
@@ -42,13 +38,7 @@ export const SidePanelTopBarRightCornerIcon = () => {
 
   return (
     <StyledIconButtonContainer>
-      <IconButton
-        Icon={IconEdit}
-        size="small"
-        variant="tertiary"
-        onClick={() => switchToNewChat()}
-        ariaLabel={t`New conversation`}
-      />
+      <SidePanelAskAiNewChatButton />
     </StyledIconButtonContainer>
   );
 };

@@ -1,4 +1,4 @@
-import { makeMetadataAPIRequest } from 'test/integration/metadata/suites/utils/make-metadata-api-request.util';
+import { makeMetadataApiRequest } from 'test/integration/metadata/suites/utils/make-metadata-api-request.util';
 
 import {
   extractSessionCookie,
@@ -7,7 +7,6 @@ import {
   signInWithCookieCapture,
 } from 'test/integration/graphql/suites/auth/user-sessions/utils/sign-in-with-cookie-capture.util';
 import { currentUserIdentityQueryFactory } from 'test/integration/graphql/suites/auth/user-sessions/utils/user-session-operations.util';
-import { setupDatabaseConfigOverrideForSuite } from 'test/integration/graphql/suites/auth/user-sessions/utils/setup-database-config-override.util';
 
 import { generateUserSessionToken } from 'src/engine/core-modules/user-session/utils/generate-user-session-token.util';
 
@@ -17,8 +16,6 @@ import {
 } from 'test/integration/graphql/suites/auth/user-sessions/constants/session-origins.constants';
 
 describe('failing session cookie authentication (integration)', () => {
-  setupDatabaseConfigOverrideForSuite('AUTH_COOKIE_SESSIONS_ENABLED', true);
-
   let sessionToken: string;
   let sessionCookieName: string;
   let sessionCookieHeader: string;
@@ -39,9 +36,8 @@ describe('failing session cookie authentication (integration)', () => {
   });
 
   it('should reject a session token presented as a Bearer header', async () => {
-    // Cookie-only by design: accepting sess_ tokens as Bearer would reopen
-    // the XSS-exfiltration surface cookie sessions close.
-    const response = await makeMetadataAPIRequest(
+    // Accepting sess_ tokens as Bearer would reopen the XSS-exfiltration surface cookie sessions close.
+    const response = await makeMetadataApiRequest(
       currentUserIdentityQueryFactory(),
       sessionToken,
     ).expect(200);

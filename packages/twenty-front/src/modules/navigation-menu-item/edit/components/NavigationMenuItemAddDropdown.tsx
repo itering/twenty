@@ -1,0 +1,75 @@
+import { type ReactElement } from 'react';
+import { Dropdown } from 'twenty-ui/components/navigation';
+
+import { navigationMenuItemInsertionAnchorState } from '@/navigation-menu-item/common/states/navigationMenuItemInsertionAnchorState';
+import { type NavigationMenuItemSection } from '@/navigation-menu-item/common/types/NavigationMenuItemSection';
+import { NavigationMenuItemAddDropdownContent } from '@/navigation-menu-item/edit/components/NavigationMenuItemAddDropdownContent';
+import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
+import { DropdownRoot } from '@/ui/layout/dropdown/components/DropdownRoot';
+import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
+import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+
+type NavigationMenuItemAddDropdownProps = {
+  children: ReactElement;
+  instanceId?: string;
+  section?: NavigationMenuItemSection;
+  // TODO(@thomtrp): remove once IS_CUSTOMIZABLE_SIDEBAR_ENABLED is on for every workspace
+  shouldShowHiddenItems?: boolean;
+  onOpen?: () => void;
+} & (
+  | { parentId: string; position: number }
+  | { parentId?: never; position?: number }
+);
+
+export const NavigationMenuItemAddDropdown = ({
+  children,
+  instanceId,
+  section = 'workspace',
+  shouldShowHiddenItems = false,
+  parentId,
+  position,
+  onOpen,
+}: NavigationMenuItemAddDropdownProps) => {
+  const navigationMenuItemInsertionAnchor = useAtomStateValue(
+    navigationMenuItemInsertionAnchorState,
+  );
+  const dropdownId = `navigation-add-item-${instanceId ?? parentId ?? 'workspace'}`;
+  const { closeDropdown } = useCloseDropdown();
+
+  return (
+    <DropdownRoot
+      dropdownId={dropdownId}
+      type="picker"
+      onOpenChange={(open) => {
+        if (open) {
+          onOpen?.();
+        }
+      }}
+    >
+      <Dropdown.Trigger
+        nativeButton={false}
+        render={<div tabIndex={-1}>{children}</div>}
+      />
+      <DropdownContent
+        anchor={
+          navigationMenuItemInsertionAnchor?.dropdownId === dropdownId
+            ? navigationMenuItemInsertionAnchor.element
+            : undefined
+        }
+        side="right"
+        align="start"
+        width={GenericDropdownContentWidth.ExtraLarge}
+      >
+        <NavigationMenuItemAddDropdownContent
+          section={section}
+          shouldShowHiddenItems={shouldShowHiddenItems}
+          dropdownId={dropdownId}
+          parentId={parentId}
+          position={position}
+          onClose={() => closeDropdown(dropdownId)}
+        />
+      </DropdownContent>
+    </DropdownRoot>
+  );
+};

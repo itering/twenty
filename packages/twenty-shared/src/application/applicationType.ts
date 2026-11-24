@@ -1,7 +1,12 @@
+import { type HealthCheckLogicFunctionApplicationManifest } from '@/application/healthCheckLogicFunctionApplicationType';
 import { type PostInstallLogicFunctionApplicationManifest } from '@/application/postInstallLogicFunctionApplicationType';
 import { type PreInstallLogicFunctionApplicationManifest } from '@/application/preInstallLogicFunctionApplicationType';
 import { type SettingsFrontComponentApplicationManifest } from '@/application/settingsFrontComponentApplicationType';
 import { type UninstallLogicFunctionApplicationManifest } from '@/application/uninstallLogicFunctionApplicationType';
+import { type FrontComponentSharedDependenciesManifest } from '@/application/frontComponentSharedDependenciesManifestType';
+import { type ApplicationCapability } from '@/application/applicationCapabilityType';
+import { type IframeMediaPermission } from '@/types/IframeMediaPermission';
+import { type ApplicationBilling } from './applicationBillingType';
 import { type ApplicationCategory } from './applicationCategoryType';
 import { type ApplicationVariables } from './applicationVariablesType';
 import { type ServerVariables } from './server-variables.type';
@@ -11,7 +16,10 @@ export type ApplicationManifest = SyncableEntityOptions & {
   defaultRoleUniversalIdentifier: string;
   displayName: string;
   description: string;
+  requestedCapabilities?: ApplicationCapability[];
+  requestedIframeMediaPermissions?: IframeMediaPermission[];
   applicationVariables?: ApplicationVariables;
+  billing?: ApplicationBilling;
   serverVariables?: ServerVariables;
   author?: string;
   category?: ApplicationCategory;
@@ -33,13 +41,15 @@ export type ApplicationManifest = SyncableEntityOptions & {
   postInstallLogicFunction?: PostInstallLogicFunctionApplicationManifest;
   preInstallLogicFunction?: PreInstallLogicFunctionApplicationManifest;
   uninstallLogicFunction?: UninstallLogicFunctionApplicationManifest;
+  healthCheckLogicFunction?: HealthCheckLogicFunctionApplicationManifest;
   settingsFrontComponent?: SettingsFrontComponentApplicationManifest;
+  frontComponentSharedDependencies?: FrontComponentSharedDependenciesManifest;
   /**
    * @deprecated Use `defineSettingsFrontComponent()` (exposed on the manifest
    * as `settingsFrontComponent`) instead. This property is ignored.
    */
   settingsCustomTabFrontComponentUniversalIdentifier?: string;
-  packageJsonChecksum: string | null;
+  packageJsonChecksum: string;
   yarnLockChecksum: string | null;
   requiredServerVersionRange?: string | null;
 };

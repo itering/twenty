@@ -5,14 +5,14 @@ import {
   type ConflictingFieldGroup,
   type ConflictingProperty,
 } from 'src/engine/api/common/common-query-runners/common-create-many-query-runner/types/conflicting-field-group.type';
-import { getFlatFieldsFromFlatObjectMetadata } from 'src/engine/api/graphql/workspace-schema-builder/utils/get-flat-fields-for-flat-object-metadata.util';
+import { getFlatFieldsFromFlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/utils/get-flat-fields-for-flat-object-metadata.util';
 import { computeCompositeColumnName } from 'src/engine/metadata-modules/field-metadata/utils/compute-column-name.util';
 import { computeMorphOrRelationFieldJoinColumnName } from 'src/engine/metadata-modules/field-metadata/utils/compute-morph-or-relation-field-join-column-name.util';
 import { isCompositeFieldMetadataType } from 'src/engine/metadata-modules/field-metadata/utils/is-composite-field-metadata-type.util';
 import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
 import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
 import { findManyFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-many-flat-entity-by-id-in-flat-entity-maps.util';
-import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { type OrmFlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/orm-flat-field-metadata.type';
 import { isMorphOrRelationFlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/is-morph-or-relation-flat-field-metadata.util';
 import {
   type FlatIndexFieldMetadata,
@@ -24,7 +24,7 @@ const computeConflictingPropertiesForIndexField = ({
   flatFieldMetadata,
   subFieldName,
 }: {
-  flatFieldMetadata: FlatFieldMetadata;
+  flatFieldMetadata: OrmFlatFieldMetadata;
   subFieldName: string | null;
 }): ConflictingProperty[] | undefined => {
   if (isMorphOrRelationFlatFieldMetadata(flatFieldMetadata)) {
@@ -85,7 +85,7 @@ const computeConflictingPropertiesForIndex = ({
   flatFieldMetadataMaps,
 }: {
   flatIndexFieldMetadatas: FlatIndexFieldMetadata[];
-  flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+  flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>;
 }):
   | { baseFields: string[]; conflictingProperties: ConflictingProperty[] }
   | undefined => {
@@ -127,7 +127,7 @@ const computeConflictingPropertiesForIndex = ({
 
 export const getConflictingFields = (
   flatObjectMetadata: FlatObjectMetadata,
-  flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
+  flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>,
   flatIndexMaps: FlatEntityMaps<FlatIndexMetadata>,
 ): ConflictingFieldGroup[] => {
   const conflictingFieldGroups: ConflictingFieldGroup[] = [];
@@ -162,9 +162,16 @@ export const getConflictingFields = (
       continue;
     }
 
+    const isUniqueFieldIndexIgnoringDeletedRecords =
+      flatIndexMetadata.flatIndexFieldMetadatas.length === 1 &&
+      flatIndexMetadata.indexWhereClause === '"deletedAt" IS NULL';
+
     conflictingFieldGroups.push({
       baseFields: indexConflictingFields.baseFields,
       conflictingProperties: indexConflictingFields.conflictingProperties,
+      ...(isUniqueFieldIndexIgnoringDeletedRecords
+        ? { isIgnoringDeletedRecords: true }
+        : {}),
     });
   }
 

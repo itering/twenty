@@ -1,11 +1,7 @@
-import { GRAPH_CONFIGURATION_TYPE_TO_CONFIG_TYPENAME } from '@/side-panel/pages/page-layout/constants/GraphConfigurationTypeToConfigTypename';
-import { type ChartConfiguration } from '@/side-panel/pages/page-layout/types/ChartConfiguration';
 import { GraphType } from '@/side-panel/pages/page-layout/types/GraphType';
 import { convertAggregateOperationForDateField } from '@/side-panel/pages/page-layout/utils/convertAggregateOperationForDateField';
-import { convertBarOrLineChartConfigToPieChart } from '@/side-panel/pages/page-layout/utils/convertBarOrLineChartConfigToPieChart';
-import { convertPieChartConfigToBarOrLineChart } from '@/side-panel/pages/page-layout/utils/convertPieChartConfigToBarOrLineChart';
+import { getChartConfigurationUpdateForGraphType } from '@/side-panel/pages/page-layout/utils/getChartConfigurationUpdateForGraphType';
 import { getConfigurationTypeFromGraphType } from '@/side-panel/pages/page-layout/utils/getConfigurationTypeFromGraphType';
-import { isWidgetConfigurationOfType } from '@/side-panel/pages/page-layout/utils/isWidgetConfigurationOfType';
 import { isWidgetConfigurationOfTypeGraph } from '@/side-panel/pages/page-layout/utils/isWidgetConfigurationOfTypeGraph';
 import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
 import { pageLayoutCurrentLayoutsComponentState } from '@/page-layout/states/pageLayoutCurrentLayoutsComponentState';
@@ -19,7 +15,7 @@ import { useAtomComponentStateCallbackState } from '@/ui/utilities/state/jotai/h
 import { useStore } from 'jotai';
 import { useCallback } from 'react';
 import { isDefined } from 'twenty-shared/utils';
-import { BarChartLayout } from '~/generated-metadata/graphql';
+import { doNotTranslate } from 'twenty-shared/i18n';
 
 export const useGetConfigToUpdateAfterGraphTypeChange = ({
   pageLayoutId,
@@ -54,7 +50,7 @@ export const useGetConfigToUpdateAfterGraphTypeChange = ({
       const currentlyEditingWidgetId = store.get(currentlyEditingWidgetIdState);
 
       if (!isDefined(currentlyEditingWidgetId)) {
-        throw new Error('No widget is currently being edited');
+        throw new Error(doNotTranslate('No widget is currently being edited'));
       }
 
       const draftPageLayout = store.get(pageLayoutDraftState);
@@ -67,22 +63,25 @@ export const useGetConfigToUpdateAfterGraphTypeChange = ({
         !isDefined(widgetInDraft) ||
         !isDefined(widgetInDraft.configuration)
       ) {
-        throw new Error('Widget configuration not found in draft state');
+        throw new Error(
+          doNotTranslate('Widget configuration not found in draft state'),
+        );
       }
 
       const currentConfiguration = widgetInDraft.configuration;
 
       if (!isWidgetConfigurationOfTypeGraph(currentConfiguration)) {
-        throw new Error('Widget configuration is not a chart configuration');
+        throw new Error(
+          doNotTranslate('Widget configuration is not a chart configuration'),
+        );
       }
 
       const newConfigurationType = getConfigurationTypeFromGraphType(graphType);
 
-      let configToUpdate = {
-        __typename:
-          GRAPH_CONFIGURATION_TYPE_TO_CONFIG_TYPENAME[newConfigurationType],
-        configurationType: newConfigurationType,
-      } as Partial<ChartConfiguration>;
+      let configToUpdate = getChartConfigurationUpdateForGraphType({
+        currentConfiguration,
+        graphType,
+      });
 
       if (graphType !== GraphType.AGGREGATE) {
         const objectMetadataItem = objectMetadataItems.find(
@@ -101,56 +100,6 @@ export const useGetConfigToUpdateAfterGraphTypeChange = ({
             aggregateOperation: convertedAggregateOperation,
           };
         }
-      }
-
-      const isPieChart = graphType === GraphType.PIE;
-      const isVerticalBarChart = graphType === GraphType.VERTICAL_BAR;
-      const isHorizontalBarChart = graphType === GraphType.HORIZONTAL_BAR;
-      const isLineChart = graphType === GraphType.LINE;
-      const isBarOrLineChart =
-        isVerticalBarChart || isHorizontalBarChart || isLineChart;
-
-      const wasBarOrLineChart =
-        isWidgetConfigurationOfType(
-          currentConfiguration,
-          'BarChartConfiguration',
-        ) ||
-        isWidgetConfigurationOfType(
-          currentConfiguration,
-          'LineChartConfiguration',
-        );
-
-      const wasPieChart = isWidgetConfigurationOfType(
-        currentConfiguration,
-        'PieChartConfiguration',
-      );
-
-      if (isPieChart && wasBarOrLineChart) {
-        configToUpdate = {
-          ...configToUpdate,
-          ...convertBarOrLineChartConfigToPieChart(currentConfiguration),
-        };
-      }
-
-      if (isBarOrLineChart && wasPieChart) {
-        configToUpdate = {
-          ...configToUpdate,
-          ...convertPieChartConfigToBarOrLineChart(currentConfiguration),
-        };
-      }
-
-      if (isHorizontalBarChart) {
-        configToUpdate = {
-          ...configToUpdate,
-          layout: BarChartLayout.HORIZONTAL,
-        };
-      }
-
-      if (isVerticalBarChart) {
-        configToUpdate = {
-          ...configToUpdate,
-          layout: BarChartLayout.VERTICAL,
-        };
       }
 
       const activeTabId = store.get(

@@ -1,4 +1,5 @@
 export enum FileFolder {
+  RecordExport = 'record-export',
   CorePicture = 'core-picture',
   AgentChat = 'agent-chat',
   BuiltLogicFunction = 'built-logic-function',
@@ -13,4 +14,5 @@ export enum FileFolder {
   AppTarball = 'app-tarball',
   GeneratedSdkClient = 'generated-sdk-client',
   Dpa = 'dpa',
+  WorkspaceDataExport = 'workspace-data-export',
 }

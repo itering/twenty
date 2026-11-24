@@ -1,23 +1,23 @@
 /* @license Enterprise */
 
+import { INTERNAL_CREDITS_PER_DISPLAY_CREDIT } from 'twenty-shared/constants';
 import { isDefined } from 'class-validator';
 import { type BillingPlanDTO } from 'src/engine/core-modules/billing/dtos/billing-plan.dto';
 import { type BillingPriceLicensedDTO } from 'src/engine/core-modules/billing/dtos/billing-price-licensed.dto';
-import { type BillingPriceMeteredDTO } from 'src/engine/core-modules/billing/dtos/billing-price-metered.dto';
 import { type BillingPriceEntity } from 'src/engine/core-modules/billing/entities/billing-price.entity';
 import { SubscriptionInterval } from 'src/engine/core-modules/billing/enums/billing-subscription-interval.enum';
-import { BillingUsageType } from 'src/engine/core-modules/billing/enums/billing-usage-type.enum';
 import { type BillingGetPlanResult } from 'src/engine/core-modules/billing/types/billing-get-plan-result.type';
-import {
-  INTERNAL_CREDITS_PER_DISPLAY_CREDIT,
-  toDisplayCredits,
-} from 'src/engine/core-modules/usage/utils/to-display-credits.util';
+import { isSellableBillingPrice } from 'src/engine/core-modules/billing/utils/is-sellable-billing-price.util';
 
 export const formatBillingDatabaseProductToGraphqlDTO = (
   plan: BillingGetPlanResult,
 ): BillingPlanDTO => {
   return {
     planKey: plan.planKey,
+    isSellable: plan.isSellable,
+    isCheckoutDefault: plan.isCheckoutDefault,
+    upgradePlanKeys: plan.upgradePlanKeys,
+    downgradePlanKeys: plan.downgradePlanKeys,
     baseProducts: plan.baseProducts.map((product) => {
       return {
         ...product,
@@ -34,34 +34,6 @@ export const formatBillingDatabaseProductToGraphqlDTO = (
         ),
       };
     }),
-    meteredProducts: plan.meteredProducts.map((product) => {
-      return {
-        ...product,
-        metadata: {
-          ...product.metadata,
-          priceUsageBased: BillingUsageType.METERED,
-        },
-        prices: product.billingPrices.map(
-          formatBillingDatabasePriceToMeteredPriceDTO,
-        ),
-      };
-    }),
-  };
-};
-
-const formatBillingDatabasePriceToMeteredPriceDTO = (
-  billingPrice: BillingPriceEntity,
-): BillingPriceMeteredDTO => {
-  return {
-    tiers:
-      billingPrice?.tiers?.map((tier) => ({
-        upTo: tier.up_to !== null ? toDisplayCredits(tier.up_to) : tier.up_to,
-        flatAmount: tier.flat_amount,
-        unitAmount: tier.unit_amount,
-      })) ?? [],
-    recurringInterval: billingPrice?.interval ?? SubscriptionInterval.Month,
-    stripePriceId: billingPrice?.stripePriceId,
-    priceUsageType: BillingUsageType.METERED,
   };
 };
 
@@ -72,10 +44,10 @@ const formatBillingDatabasePriceToLicensedPriceDTO = (
     recurringInterval: billingPrice?.interval ?? SubscriptionInterval.Month,
     unitAmount: billingPrice?.unitAmount ?? 0,
     stripePriceId: billingPrice?.stripePriceId,
-    priceUsageType: BillingUsageType.LICENSED,
     creditAmount: isDefined(billingPrice?.metadata?.credit_amount)
       ? Number(billingPrice?.metadata?.credit_amount) /
         INTERNAL_CREDITS_PER_DISPLAY_CREDIT
       : null,
+    isSellable: isSellableBillingPrice(billingPrice),
   };
 };

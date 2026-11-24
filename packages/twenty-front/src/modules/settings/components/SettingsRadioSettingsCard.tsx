@@ -1,30 +1,22 @@
+import { css } from '@linaria/core';
 import { styled } from '@linaria/react';
 import { type MessageDescriptor } from '@lingui/core';
 import { useLingui } from '@lingui/react/macro';
-import { type KeyboardEvent, type ReactNode } from 'react';
+import { Fragment, type ReactNode, useId } from 'react';
 import { isDefined } from 'twenty-shared/utils';
-import { Radio } from 'twenty-ui/input';
-import { Card, CardContent } from 'twenty-ui/surfaces';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { Radio, RadioGroup } from 'twenty-ui/primitives/input';
+import { Card } from 'twenty-ui/primitives/surfaces';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 type SettingsRadioSettingsCardProps<Option extends { value: string }> = {
   name: string;
   onChange: (nextValue: Option['value']) => void;
   options: Option[];
   value: Option['value'];
+  disabled?: boolean;
 };
 
-const StyledCardContentContainer = styled.div`
-  > * {
-    cursor: pointer;
-
-    &:hover {
-      background: ${themeCssVariables.background.transparent.lighter};
-    }
-  }
-`;
-
-const StyledOptionHeader = styled.div`
+const StyledOptionHeader = styled.label`
   align-items: center;
   display: flex;
   gap: ${themeCssVariables.spacing[4]};
@@ -52,8 +44,8 @@ const StyledRadioContainer = styled.span`
   margin-left: auto;
 `;
 
-const StyledExpandedContent = styled.div`
-  margin-top: ${themeCssVariables.spacing[4]};
+const EXPANDED_CONTENT_CLASS_NAME = css`
+  padding-top: ${themeCssVariables.spacing[0]};
 `;
 
 export const SettingsRadioSettingsCard = <
@@ -69,64 +61,78 @@ export const SettingsRadioSettingsCard = <
   onChange,
   options,
   value,
+  disabled = false,
 }: SettingsRadioSettingsCardProps<Option>) => {
+  const groupId = useId();
   const { i18n } = useLingui();
 
-  const handleKeyDown = (
-    event: KeyboardEvent<HTMLDivElement>,
-    optionValue: Option['value'],
-  ) => {
-    if (event.key !== 'Enter' && event.key !== ' ') {
-      return;
-    }
-
-    event.preventDefault();
-    onChange(optionValue);
-  };
-
   return (
-    <Card fullWidth rounded role="radiogroup">
-      {options.map((option, index) => {
-        const isSelected = value === option.value;
+    <RadioGroup
+      name={name}
+      value={value}
+      onValueChange={onChange}
+      disabled={disabled}
+      onKeyDown={(event) => {
+        if (
+          !(event.target instanceof HTMLElement) ||
+          event.target.getAttribute('role') !== 'radio'
+        ) {
+          event.preventBaseUIHandler();
+        }
+      }}
+    >
+      <Card.Root fullWidth>
+        {options.map((option, index) => {
+          const isSelected = value === option.value;
+          const hasExpandedContent =
+            isDefined(option.cardContentExpanded) && isSelected;
+          const hasDivider = index < options.length - 1;
+          const radioId = `${groupId}-${index}`;
 
-        return (
-          <StyledCardContentContainer key={option.value}>
-            <CardContent
-              aria-checked={isSelected}
-              divider={index < options.length - 1}
-              onClick={() => onChange(option.value)}
-              onKeyDown={(event) => handleKeyDown(event, option.value)}
-              role="radio"
-              tabIndex={0}
-            >
-              <StyledOptionHeader>
-                {option.cardMedia}
-                <StyledTextContainer>
-                  <StyledTitle>{i18n._(option.title)}</StyledTitle>
-                  <StyledDescription>
-                    {i18n._(option.description)}
-                  </StyledDescription>
-                </StyledTextContainer>
-                <StyledRadioContainer
-                  onClick={(event) => event.stopPropagation()}
+          return (
+            <Fragment key={option.value}>
+              <Card.Content divider={hasDivider && !hasExpandedContent}>
+                <Card.Action
+                  disabled={disabled}
+                  render={
+                    <label
+                      htmlFor={radioId}
+                      aria-labelledby={`${groupId}-${index}-title`}
+                    />
+                  }
+                />
+                <StyledOptionHeader>
+                  {option.cardMedia}
+                  <StyledTextContainer>
+                    <StyledTitle id={`${groupId}-${index}-title`}>
+                      {i18n._(option.title)}
+                    </StyledTitle>
+                    <StyledDescription id={`${groupId}-${index}-description`}>
+                      {i18n._(option.description)}
+                    </StyledDescription>
+                  </StyledTextContainer>
+                  <Card.Control render={<StyledRadioContainer />}>
+                    <Radio
+                      id={radioId}
+                      aria-labelledby={`${groupId}-${index}-title`}
+                      aria-describedby={`${groupId}-${index}-description`}
+                      value={option.value}
+                    />
+                  </Card.Control>
+                </StyledOptionHeader>
+              </Card.Content>
+              {hasExpandedContent && (
+                <Card.Content
+                  className={EXPANDED_CONTENT_CLASS_NAME}
+                  divider={hasDivider}
                 >
-                  <Radio
-                    checked={isSelected}
-                    name={name}
-                    onCheckedChange={() => onChange(option.value)}
-                    value={option.value}
-                  />
-                </StyledRadioContainer>
-              </StyledOptionHeader>
-              {isDefined(option.cardContentExpanded) && isSelected && (
-                <StyledExpandedContent>
                   {option.cardContentExpanded}
-                </StyledExpandedContent>
+                </Card.Content>
               )}
-            </CardContent>
-          </StyledCardContentContainer>
-        );
-      })}
-    </Card>
+            </Fragment>
+          );
+        })}
+      </Card.Root>
+    </RadioGroup>
   );
 };

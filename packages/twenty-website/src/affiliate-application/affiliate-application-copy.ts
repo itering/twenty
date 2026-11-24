@@ -1,0 +1,36 @@
+import { msg } from '@lingui/core/macro';
+
+export const AFFILIATE_APPLICATION_COPY = {
+  title: msg`Apply as a\n*Twenty creator*`,
+  subtitle: msg`We review every application within 5 business days and send your link once you're approved.`,
+  fields: {
+    name: msg`Full name`,
+    email: msg`Email`,
+    partnerType: msg`Partner type`,
+    partnerTypePlaceholder: msg`Select a partner type`,
+    mainChannel: msg`Main channel (URL)`,
+    mainChannelPlaceholder: msg`youtube.com/@yourname`,
+    audienceSize: msg`Audience size or clients`,
+    audienceSizePlaceholder: msg`12k newsletter subscribers`,
+    country: msg`Country`,
+    countryPlaceholder: msg`Select your country`,
+    countrySearchPlaceholder: msg`Search a country…`,
+    countrySearchEmpty: msg`No matching country.`,
+    promotionPlan: msg`How you plan to promote Twenty`,
+    promotionPlanPlaceholder: msg`Reviews, tutorials, migration guides, client recommendations…`,
+  },
+  errors: {
+    name: msg`Please enter your full name.`,
+    email: msg`Please enter a valid email address.`,
+    partnerType: msg`Please select a partner type.`,
+    mainChannel: msg`Please enter the link to your main channel, for example youtube.com/@yourname.`,
+    audienceSize: msg`Audience size must be 200 characters or fewer.`,
+    country: msg`Country must be 100 characters or fewer.`,
+    promotionPlan: msg`How you plan to promote Twenty must be 2,000 characters or fewer.`,
+    acceptsTerms: msg`Please agree to the program terms.`,
+    unexpected: msg`Something went wrong. Please try again.`,
+  },
+  submit: msg`Submit application`,
+  submitting: msg`Submitting…`,
+  successHeading: msg`Application received`,
+} as const;

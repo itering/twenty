@@ -9,10 +9,12 @@ import { subFieldNameUsedInDropdownComponentState } from '@/object-record/object
 import { useUpsertRecordFilter } from '@/object-record/record-filter/hooks/useUpsertRecordFilter';
 import { currentRecordFiltersComponentState } from '@/object-record/record-filter/states/currentRecordFiltersComponentState';
 import { type RecordFilter } from '@/object-record/record-filter/types/RecordFilter';
+import { getRelationTargetFieldLabel } from '@/object-metadata/utils/getRelationTargetFieldLabel';
 import { getRecordFilterOperands } from '@/object-record/record-filter/utils/getRecordFilterOperands';
 import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
 import { getFilterTypeFromFieldType, isDefined } from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
 
 type ApplyAdvancedFilterRelationTargetFieldParams = {
   sourceFieldMetadataItem: FieldMetadataItem;
@@ -75,7 +77,9 @@ export const useApplyAdvancedFilterRelationTargetField = () => {
 
     if (!isDefined(firstOperand)) {
       throw new Error(
-        `No valid operand found for relation-traversal filter type: ${filterType}`,
+        doNotTranslate(
+          `No valid operand found for relation-traversal filter type: ${filterType}`,
+        ),
       );
     }
 
@@ -100,7 +104,10 @@ export const useApplyAdvancedFilterRelationTargetField = () => {
       positionInRecordFilterGroup:
         existingRecordFilter?.positionInRecordFilterGroup,
       type: filterType,
-      label: `${sourceFieldMetadataItem.label} → ${relationTargetFieldMetadataItem.label}`,
+      label: getRelationTargetFieldLabel({
+        sourceFieldMetadataItem,
+        relationTargetFieldMetadataItem,
+      }),
       subFieldName: null,
       relationTargetFieldMetadataId: relationTargetFieldMetadataItem.id,
     } satisfies RecordFilter;

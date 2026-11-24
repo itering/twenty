@@ -1,12 +1,17 @@
 ---
 title: Key-Value Store
 description: Persist intermediate results, cache data, and share state across logic function runs with the built-in application key-value store.
-icon: "database"
 ---
+
+import { PageBanner } from "/snippets/page-banner.mdx"
+
+## Overview
 
 Logic functions run sandboxed in short-lived Node.js processes — once a run finishes, nothing it kept in memory survives. When you need to **remember something between runs** (cache an expensive API response, store a cursor for incremental syncs, debounce work, or hand state from one function to another), persist it in the built-in key-value store.
 
 Every application gets its own isolated namespace: entries are keyed by the authenticated app, so your keys can never collide with — or be read by — another application.
+
+The store is **persistent**: entries are stored in the instance's PostgreSQL database — not in an in-memory cache like Redis — so they survive server restarts, deployments, and app updates, and stay around until you delete them. This makes it reliable for durable state like sync cursors or per-user configuration, not just short-lived caches. Values are stored as plain JSON without application-level encryption, so don't put secrets in it — keep API keys and other credentials in secret [application or server variables](/developers/extend/apps/config/application), which are encrypted at rest.
 
 ```text
   ┌─────────────────┐   kv.set(key, value)   ┌──────────────────────────┐
@@ -96,7 +101,7 @@ export default defineLogicFunction({
 - **Namespacing.** Prefix keys to keep different concerns apart — `sync-cursor:linear`, `cache:exchange-rate:USD:EUR`, `lock:nightly-report`.
 - **Expiry (TTL).** The store has no built-in expiration. Store a timestamp inside the value (as in the cache example) and check it on read, or clear stale keys from a [cron-triggered function](/developers/extend/apps/logic/logic-functions).
 - **What to store.** Any JSON-serializable value — numbers, strings, arrays, objects. Keep entries small; this is for coordination and caching, not large blobs or files. For files, use a `FILES` field and [`uploadFile`](/developers/extend/apps/logic/logic-functions#uploading-files).
-- **Visibility.** Entries live in the instance database, not as workspace records — they never show up in the workspace UI, aren't part of your app's data model, and need no role or object permissions.
+- **Visibility.** Entries live in the instance's Postgres database, not as workspace records — they never show up in the workspace UI, aren't part of your app's data model, and need no role or object permissions.
 
 ## Alternative: a queryable store object
 
@@ -108,3 +113,5 @@ The built-in store is deliberately opaque: entries aren't records, so you can't 
 <Note>
 Unlike the built-in store, a custom object is always scoped to one workspace — it can't share entries across installs the way `SERVER` keys do.
 </Note>
+
+<PageBanner illustration="card-page-key-value-store" />

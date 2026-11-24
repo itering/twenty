@@ -3,7 +3,9 @@ import {
   type AuthProviders,
   type Billing,
   type Captcha,
+  type ClientAiEvaluationModelConfig,
   type ClientAiModelConfig,
+  type ClientAiModelTierConfig,
   type ClientConfigMaintenanceMode,
   type PublicFeatureFlag,
   type Sentry,
@@ -15,6 +17,8 @@ import { type OnboardingConfig } from '@/client-config/types/OnboardingConfig';
 export type ClientConfig = {
   appVersion?: string;
   aiModels: Array<ClientAiModelConfig>;
+  aiEvaluationModels: Array<ClientAiEvaluationModelConfig>;
+  aiModelTiers: Array<ClientAiModelTierConfig>;
   analyticsEnabled: boolean;
   api: ApiConfig;
   authProviders: AuthProviders;
@@ -26,6 +30,7 @@ export type ClientConfig = {
   captcha: Captcha;
   defaultSubdomain?: string;
   frontDomain: string;
+  serverUrl: string;
   publicFunctionDomain?: string | null;
   isAttachmentPreviewEnabled: boolean;
   isConfigVariablesInDbEnabled: boolean;
@@ -35,7 +40,6 @@ export type ClientConfig = {
   isMicrosoftCalendarEnabled: boolean;
   isMicrosoftMessagingEnabled: boolean;
   isMultiWorkspaceEnabled: boolean;
-  isCookieSessionEnabled: boolean;
   isImapSmtpCaldavEnabled: boolean;
   isEmailingDomainInDemoMode: boolean;
   isCloudflareIntegrationEnabled: boolean;
@@ -51,4 +55,5 @@ export type ClientConfig = {
   allowRequestsToTwentyIcons: boolean;
   maintenance?: ClientConfigMaintenanceMode;
   enterpriseInstanceType?: EnterpriseInstanceType;
+  webPushVapidPublicKey?: string | null;
 };

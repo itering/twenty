@@ -1,30 +1,41 @@
-import { currentAiChatThreadState } from '@/ai/states/currentAiChatThreadState';
-import { currentAiChatThreadTitleComponentFamilyState } from '@/ai/states/currentAiChatThreadTitleComponentFamilyState';
-import { useAtomComponentFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentFamilyStateValue';
+import { InboxThreadDetailsDropdown } from '@/inbox/components/InboxThreadDetailsDropdown';
+import { useAiChatThreadDisplayLabel } from '@/ai-chat/threads/hooks/useAiChatThreadDisplayLabel';
+import { newAiChatThreadIdState } from '@/ai-chat/states/newAiChatThreadIdState';
+import { aiChatThreadRecordFamilySelector } from '@/ai-chat/threads/states/selectors/aiChatThreadRecordFamilySelector';
+import { useAskAiSidePanelThreadId } from '@/side-panel/hooks/useAskAiSidePanelThreadId';
+import { HeaderIdentifier } from '@/ui/layout/page/components/HeaderIdentifier';
+import { useAtomFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilySelectorValue';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { styled } from '@linaria/react';
-import { t } from '@lingui/core/macro';
-import { OverflowingTextWithTooltip } from 'twenty-ui/surfaces';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { useLingui } from '@lingui/react/macro';
 
-const StyledPageTitle = styled.div`
-  color: ${themeCssVariables.font.color.primary};
-  font-size: ${themeCssVariables.font.size.sm};
-  font-weight: ${themeCssVariables.font.weight.semiBold};
+const StyledContainer = styled.div`
+  align-items: center;
+  display: flex;
+  gap: ${themeCssVariables.spacing[2]};
+  min-width: 0;
 `;
 
 export const SidePanelAskAiInfo = () => {
-  const currentAiChatThread = useAtomStateValue(currentAiChatThreadState);
-  const currentAiChatThreadTitle = useAtomComponentFamilyStateValue(
-    currentAiChatThreadTitleComponentFamilyState,
-    { threadId: currentAiChatThread },
+  const { t } = useLingui();
+  const askAiSidePanelThreadId = useAskAiSidePanelThreadId();
+  const newAiChatThreadId = useAtomStateValue(newAiChatThreadIdState);
+  const thread = useAtomFamilySelectorValue(
+    aiChatThreadRecordFamilySelector,
+    askAiSidePanelThreadId,
   );
+  const displayLabel = useAiChatThreadDisplayLabel({
+    thread,
+    fallbackLabel: t`Ask AI`,
+  });
 
   return (
-    <StyledPageTitle>
-      <OverflowingTextWithTooltip
-        text={currentAiChatThreadTitle ?? t`Ask AI`}
-      />
-    </StyledPageTitle>
+    <StyledContainer>
+      <HeaderIdentifier title={displayLabel} />
+      {askAiSidePanelThreadId !== newAiChatThreadId && (
+        <InboxThreadDetailsDropdown threadId={askAiSidePanelThreadId} />
+      )}
+    </StyledContainer>
   );
 };

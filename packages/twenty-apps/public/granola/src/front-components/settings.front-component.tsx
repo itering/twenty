@@ -1,0 +1,11 @@
+import { defineFrontComponent } from 'twenty-sdk/define';
+import { GRANOLA_SETTINGS_UNIVERSAL_IDENTIFIER } from 'src/constants/universal-identifiers';
+import { GranolaSettings } from 'src/front-components/components/GranolaSettings';
+
+export default defineFrontComponent({
+  universalIdentifier: GRANOLA_SETTINGS_UNIVERSAL_IDENTIFIER,
+  name: 'granola-settings',
+  description:
+    'Granola account connection, folder, and history import settings.',
+  component: GranolaSettings,
+});

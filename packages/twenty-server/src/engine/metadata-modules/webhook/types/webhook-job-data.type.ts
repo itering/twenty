@@ -1,4 +1,4 @@
-import { type MetadataEvent } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-runner/types/metadata-event';
+import { type MetadataEvent } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-runner/types/metadata-event.type';
 
 type WebhookJobBase = {
   targetUrl: string;
@@ -12,6 +12,7 @@ type WebhookJobBase = {
 };
 
 export type CallWebhookJobData = WebhookJobBase & {
+  eventId: string;
   objectMetadata: { id: string; nameSingular: string };
   workspaceMemberId?: string;
   applicationId?: string;

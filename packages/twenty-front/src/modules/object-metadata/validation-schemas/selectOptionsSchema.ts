@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { t } from '@lingui/core/macro';
 
 import { themeColorSchema } from 'twenty-ui/utilities';
-import { computeOptionValueFromLabel } from '~/pages/settings/data-model/utils/computeOptionValueFromLabel';
+import { computeOptionValueFromLabel } from '@/object-metadata/utils/computeOptionValueFromLabel';
 
 const selectOptionSchema = z
   .object({
@@ -10,6 +11,8 @@ const selectOptionSchema = z
     label: z.string().trim().min(1),
     position: z.number(),
     value: z.string(),
+    isActive: z.boolean().optional(),
+    applicationId: z.string().optional(),
   })
   .refine(
     (option) => {
@@ -21,7 +24,7 @@ const selectOptionSchema = z
       }
     },
     {
-      error: 'Label is not transliterable',
+      error: () => t`Label is not transliterable`,
     },
   );
 
@@ -34,7 +37,7 @@ export const selectOptionsSchema = z
       return new Set(optionIds).size === options.length;
     },
     {
-      error: 'Options must have unique ids',
+      error: () => t`Options must have unique ids`,
     },
   )
   .refine(
@@ -43,13 +46,13 @@ export const selectOptionsSchema = z
       return new Set(optionValues).size === options.length;
     },
     {
-      error: 'Options must have unique values',
+      error: () => t`Options must have unique values`,
     },
   )
   .refine(
     (options) =>
       [...options].sort().every((option, index) => option.position === index),
     {
-      error: 'Options positions must be sequential',
+      error: () => t`Options positions must be sequential`,
     },
   );

@@ -9,6 +9,7 @@ import {
 import {
   ConflictError,
   ForbiddenError,
+  InternalServerError,
   NotFoundError,
   UserInputError,
 } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
@@ -25,9 +26,19 @@ export class EmailingDomainGraphqlApiExceptionFilter implements ExceptionFilter 
         throw new ForbiddenError(exception);
       case EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_NOT_FOUND:
         throw new NotFoundError(exception);
+      case EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_INSUFFICIENT_CREDITS:
+      case EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_SUBSCRIPTION_INACTIVE:
+      case EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_USAGE_LIMIT_REACHED:
+      case EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_REQUIRES_PAID_PLAN:
       case EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_NOT_SENDABLE:
+      case EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_NOT_CANCELABLE:
+      case EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_SCHEDULE_NOT_IN_FUTURE:
+      case EmailingDomainExceptionCode.EMAILING_DOMAIN_UNSUBSCRIBE_NOT_READY:
       case EmailingDomainExceptionCode.EMAILING_DOMAIN_NOT_VERIFIED:
+      case EmailingDomainExceptionCode.EMAILING_DOMAIN_CAMPAIGN_SENDING:
         throw new UserInputError(exception);
+      case EmailingDomainExceptionCode.MESSAGE_CAMPAIGN_RECOVERY_FAILED:
+        throw new InternalServerError(exception);
       default: {
         assertUnreachable(exception.code);
       }

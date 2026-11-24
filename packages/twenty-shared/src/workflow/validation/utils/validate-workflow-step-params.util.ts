@@ -1,10 +1,14 @@
+import { isNonEmptyString } from '@sniptt/guards';
 import { workflowActionSchema } from '@/workflow/schemas/workflow-action-schema';
 import { workflowTriggerSchema } from '@/workflow/schemas/workflow-trigger-schema';
 import { isDefined } from '@/utils';
+import { parseJson } from '@/utils/parseJson';
+import { parseEmailDocument } from '@/utils/tiptap/parse-email-document';
+import { WorkflowActionType } from '@/workflow/types/WorkflowActionType';
 import {
   type ValidatableWorkflow,
   type WorkflowValidationIssue,
-} from '@/workflow/validation/types/workflow-validation.type';
+} from '@/workflow/validation/types/WorkflowValidation';
 import { type z } from 'zod';
 
 const formatZodPath = (path: PropertyKey[]): string =>
@@ -56,6 +60,38 @@ export const validateWorkflowStepParams = ({
           stepId: step.id,
         });
       }
+
+      continue;
+    }
+
+    const parsedStep = stepResult.data;
+
+    if (
+      (parsedStep.type === WorkflowActionType.SEND_EMAIL ||
+        parsedStep.type === WorkflowActionType.DRAFT_EMAIL) &&
+      // blank bodies run as empty documents until the 2-59 backfill reaches them
+      isNonEmptyString(parsedStep.settings.input.body?.trim()) &&
+      !parseEmailDocument(parseJson<unknown>(parsedStep.settings.input.body))
+        .success
+    ) {
+      issues.push({
+        severity: 'error',
+        code: 'INVALID_STEP_PARAMS',
+        message: `Step "${step.name ?? step.id}" configuration is invalid - settings.input.body: must be a serialized email document ({"type":"doc","content":[...]}), not HTML or plain text`,
+        stepId: step.id,
+      });
+    }
+
+    if (
+      parsedStep.type === WorkflowActionType.UPDATE_RECORD &&
+      parsedStep.settings.input.fieldsToUpdate.length === 0
+    ) {
+      issues.push({
+        severity: 'error',
+        code: 'UPDATE_RECORD_MISSING_FIELDS_TO_UPDATE',
+        message: `Step "${step.name ?? step.id}" has no field to update: list the fields to write in settings.input.fieldsToUpdate, with their values in objectRecord.`,
+        stepId: step.id,
+      });
     }
   }
 

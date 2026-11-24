@@ -1,5 +1,5 @@
-import { CommandMenuItemDropdown } from '@/command-menu/components/CommandMenuItemDropdown';
-import { CommandMenuItemToggle } from '@/command-menu/components/CommandMenuItemToggle';
+import { CommandMenuItemDropdownTrigger } from '@/command-menu/components/CommandMenuItemDropdownTrigger';
+import { CommandMenuItemSwitch } from '@/command-menu/components/CommandMenuItemSwitch';
 import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
 import { useRecordTableWidgetLayoutCallbacks } from '@/page-layout/widgets/record-table/hooks/useRecordTableWidgetLayoutCallbacks';
 import { useRecordTableWidgetViewForDisplay } from '@/page-layout/widgets/record-table/hooks/useRecordTableWidgetViewForDisplay';
@@ -11,9 +11,10 @@ import { RecordTableCalendarFieldDropdownContent } from '@/side-panel/pages/page
 import { RecordTableCalendarLayoutDropdownContent } from '@/side-panel/pages/page-layout/components/record-table-settings/RecordTableCalendarLayoutDropdownContent';
 import { RecordTableGroupByDropdownContent } from '@/side-panel/pages/page-layout/components/record-table-settings/RecordTableGroupByDropdownContent';
 import { RecordTableLayoutDropdownContent } from '@/side-panel/pages/page-layout/components/record-table-settings/RecordTableLayoutDropdownContent';
+import { DropdownRoot } from '@/ui/layout/dropdown/components/DropdownRoot';
 import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
+import { useOpenDropdown } from '@/ui/layout/dropdown/hooks/useOpenDropdown';
 import { SelectableListItem } from '@/ui/layout/selectable-list/components/SelectableListItem';
-import { useIsFeatureEnabled } from '@/workspace/hooks/useIsFeatureEnabled';
 import { useLingui } from '@lingui/react/macro';
 import { isDefined } from 'twenty-shared/utils';
 import {
@@ -22,11 +23,7 @@ import {
   IconEyeOff,
   IconLayoutList,
 } from 'twenty-ui/icon';
-import {
-  FeatureFlagKey,
-  ViewCalendarLayout,
-  ViewType,
-} from '~/generated-metadata/graphql';
+import { ViewCalendarLayout, ViewType } from '~/generated-metadata/graphql';
 
 type WidgetViewLayoutSettingsRowsProps = {
   pageLayoutId: string;
@@ -36,13 +33,6 @@ type WidgetViewLayoutSettingsRowsProps = {
   isLayoutRowHidden?: boolean;
 };
 
-// The embedded-view layout rows (layout type + group-by / calendar field /
-// calendar view / hide-empty-groups) shared by widgets backed by a record table
-// view: dashboard record table widgets and relation field widgets in table
-// display mode. The source object is passed in (fixed to the relation target
-// for field widgets), so this component makes no assumption about where the
-// widget lives. Hosts that surface the layout choice elsewhere (the field
-// widget's merged layout picker) hide the layout row via isLayoutRowHidden.
 export const WidgetViewLayoutSettingsRows = ({
   pageLayoutId,
   widgetId,
@@ -51,10 +41,7 @@ export const WidgetViewLayoutSettingsRows = ({
   isLayoutRowHidden = false,
 }: WidgetViewLayoutSettingsRowsProps) => {
   const { t } = useLingui();
-
-  const isCalendarWeekViewEnabled = useIsFeatureEnabled(
-    FeatureFlagKey.IS_CALENDAR_WEEK_VIEW_ENABLED,
-  );
+  const { openDropdown } = useOpenDropdown();
 
   const { handleShouldHideEmptyGroupsChange } =
     useRecordTableWidgetLayoutCallbacks({
@@ -117,109 +104,143 @@ export const WidgetViewLayoutSettingsRows = ({
   return (
     <>
       {!isLayoutRowHidden && (
-        <SelectableListItem itemId="object-view-layout">
-          <CommandMenuItemDropdown
-            Icon={CurrentLayoutIcon}
-            label={t`Layout`}
-            id="object-view-layout"
-            dropdownId="object-view-layout"
-            dropdownComponents={
-              <DropdownContent>
-                <RecordTableLayoutDropdownContent
-                  pageLayoutId={pageLayoutId}
-                  widgetId={widgetId}
-                  objectMetadataId={objectMetadataId}
-                  currentLayoutViewType={currentLayoutViewType}
-                />
-              </DropdownContent>
-            }
-            dropdownPlacement="bottom-end"
-            hasSubMenu
-            description={t(currentLayoutLabel)}
-            contextualTextPosition="right"
-          />
+        <SelectableListItem
+          itemId="object-view-layout"
+          onEnter={() =>
+            openDropdown({
+              dropdownComponentInstanceIdFromProps: 'object-view-layout',
+            })
+          }
+        >
+          <DropdownRoot dropdownId="object-view-layout" type="picker">
+            <CommandMenuItemDropdownTrigger
+              Icon={CurrentLayoutIcon}
+              label={t`Layout`}
+              id="object-view-layout"
+              description={t(currentLayoutLabel)}
+              contextualTextPosition="right"
+            />
+            <DropdownContent
+              side="bottom"
+              align="end"
+              collisionPadding={{ left: 0, right: 0 }}
+            >
+              <RecordTableLayoutDropdownContent
+                pageLayoutId={pageLayoutId}
+                widgetId={widgetId}
+                objectMetadataId={objectMetadataId}
+                currentLayoutViewType={currentLayoutViewType}
+              />
+            </DropdownContent>
+          </DropdownRoot>
         </SelectableListItem>
       )}
       {isCalendarLayout && (
-        <SelectableListItem itemId="record-table-calendar-field">
-          <CommandMenuItemDropdown
-            Icon={IconCalendarEvent}
-            label={t`Date field`}
-            id="record-table-calendar-field"
-            dropdownId="record-table-calendar-field"
-            dropdownComponents={
-              <DropdownContent>
-                <RecordTableCalendarFieldDropdownContent
-                  pageLayoutId={pageLayoutId}
-                  widgetId={widgetId}
-                  objectMetadataId={objectMetadataId}
-                  currentCalendarFieldMetadataId={calendarFieldMetadataId}
-                />
-              </DropdownContent>
-            }
-            dropdownPlacement="bottom-end"
-            hasSubMenu
-            description={calendarFieldLabel}
-            contextualTextPosition="right"
-          />
+        <SelectableListItem
+          itemId="record-table-calendar-field"
+          onEnter={() =>
+            openDropdown({
+              dropdownComponentInstanceIdFromProps:
+                'record-table-calendar-field',
+            })
+          }
+        >
+          <DropdownRoot dropdownId="record-table-calendar-field" type="picker">
+            <CommandMenuItemDropdownTrigger
+              Icon={IconCalendarEvent}
+              label={t`Date field`}
+              id="record-table-calendar-field"
+              description={calendarFieldLabel}
+              contextualTextPosition="right"
+            />
+            <DropdownContent
+              side="bottom"
+              align="end"
+              collisionPadding={{ left: 0, right: 0 }}
+            >
+              <RecordTableCalendarFieldDropdownContent
+                pageLayoutId={pageLayoutId}
+                widgetId={widgetId}
+                objectMetadataId={objectMetadataId}
+                currentCalendarFieldMetadataId={calendarFieldMetadataId}
+              />
+            </DropdownContent>
+          </DropdownRoot>
         </SelectableListItem>
       )}
-      {isCalendarLayout && isCalendarWeekViewEnabled && (
-        <SelectableListItem itemId="record-table-calendar-layout">
-          <CommandMenuItemDropdown
-            Icon={IconCalendar}
-            label={t`Calendar view`}
-            id="record-table-calendar-layout"
-            dropdownId="record-table-calendar-layout"
-            dropdownComponents={
-              <DropdownContent>
-                <RecordTableCalendarLayoutDropdownContent
-                  pageLayoutId={pageLayoutId}
-                  widgetId={widgetId}
-                  currentCalendarLayout={currentCalendarLayout}
-                />
-              </DropdownContent>
-            }
-            dropdownPlacement="bottom-end"
-            hasSubMenu
-            description={calendarLayoutLabel}
-            contextualTextPosition="right"
-          />
+      {isCalendarLayout && (
+        <SelectableListItem
+          itemId="record-table-calendar-layout"
+          onEnter={() =>
+            openDropdown({
+              dropdownComponentInstanceIdFromProps:
+                'record-table-calendar-layout',
+            })
+          }
+        >
+          <DropdownRoot dropdownId="record-table-calendar-layout" type="picker">
+            <CommandMenuItemDropdownTrigger
+              Icon={IconCalendar}
+              label={t`Calendar view`}
+              id="record-table-calendar-layout"
+              description={calendarLayoutLabel}
+              contextualTextPosition="right"
+            />
+            <DropdownContent
+              side="bottom"
+              align="end"
+              collisionPadding={{ left: 0, right: 0 }}
+            >
+              <RecordTableCalendarLayoutDropdownContent
+                pageLayoutId={pageLayoutId}
+                widgetId={widgetId}
+                currentCalendarLayout={currentCalendarLayout}
+              />
+            </DropdownContent>
+          </DropdownRoot>
         </SelectableListItem>
       )}
       {!isCalendarLayout && (
-        <SelectableListItem itemId="record-table-group-by">
-          <CommandMenuItemDropdown
-            Icon={IconLayoutList}
-            label={t`Group by`}
-            id="record-table-group-by"
-            dropdownId="record-table-group-by"
-            dropdownComponents={
-              <DropdownContent>
-                <RecordTableGroupByDropdownContent
-                  pageLayoutId={pageLayoutId}
-                  widgetId={widgetId}
-                  objectMetadataId={objectMetadataId}
-                  currentMainGroupByFieldMetadataId={mainGroupByFieldMetadataId}
-                  isClearable={!isKanbanLayout}
-                />
-              </DropdownContent>
-            }
-            dropdownPlacement="bottom-end"
-            hasSubMenu
-            description={mainGroupByFieldLabel}
-            contextualTextPosition="right"
-          />
+        <SelectableListItem
+          itemId="record-table-group-by"
+          onEnter={() =>
+            openDropdown({
+              dropdownComponentInstanceIdFromProps: 'record-table-group-by',
+            })
+          }
+        >
+          <DropdownRoot dropdownId="record-table-group-by" type="picker">
+            <CommandMenuItemDropdownTrigger
+              Icon={IconLayoutList}
+              label={t`Group by`}
+              id="record-table-group-by"
+              description={mainGroupByFieldLabel}
+              contextualTextPosition="right"
+            />
+            <DropdownContent
+              side="bottom"
+              align="end"
+              collisionPadding={{ left: 0, right: 0 }}
+            >
+              <RecordTableGroupByDropdownContent
+                pageLayoutId={pageLayoutId}
+                widgetId={widgetId}
+                objectMetadataId={objectMetadataId}
+                currentMainGroupByFieldMetadataId={mainGroupByFieldMetadataId}
+                isClearable={!isKanbanLayout}
+              />
+            </DropdownContent>
+          </DropdownRoot>
         </SelectableListItem>
       )}
       {!isCalendarLayout && hasGroupBy && (
         <SelectableListItem itemId="record-table-hide-empty-groups">
-          <CommandMenuItemToggle
+          <CommandMenuItemSwitch
             LeftIcon={IconEyeOff}
             text={t`Hide empty groups`}
             id="record-table-hide-empty-groups"
-            toggled={shouldHideEmptyGroups}
-            onToggleChange={handleShouldHideEmptyGroupsChange}
+            checked={shouldHideEmptyGroups}
+            onCheckedChange={handleShouldHideEmptyGroupsChange}
           />
         </SelectableListItem>
       )}

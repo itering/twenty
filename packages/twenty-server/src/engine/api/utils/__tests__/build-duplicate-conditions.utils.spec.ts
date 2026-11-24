@@ -2,9 +2,9 @@ import {
   mockPersonFlatFieldMetadataMaps,
   mockPersonFlatObjectMetadata,
   mockPersonFlatObjectMetadataMaps,
-} from 'src/engine/api/graphql/graphql-query-runner/__mocks__/mockPersonObjectMetadata';
-import { mockPersonRecords } from 'src/engine/api/graphql/graphql-query-runner/__mocks__/mockPersonRecords';
-import { buildDuplicateConditions } from 'src/engine/api/utils/build-duplicate-conditions.utils';
+} from 'src/engine/api/common/__mocks__/mockPersonObjectMetadata';
+import { mockPersonRecords } from 'src/engine/api/common/__mocks__/mockPersonRecords';
+import { buildDuplicateConditions } from 'src/engine/api/utils/build-duplicate-conditions.util';
 
 describe('buildDuplicateConditions', () => {
   it('should build conditions based on duplicate criteria from composite field', () => {

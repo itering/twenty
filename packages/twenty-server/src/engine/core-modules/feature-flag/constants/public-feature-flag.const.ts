@@ -14,48 +14,21 @@ export type PublicFeatureFlag = {
 
 export const PUBLIC_FEATURE_FLAGS: PublicFeatureFlag[] = [
   {
-    key: FeatureFlagKey.IS_AI_CHAT_PAGE_ENABLED,
+    key: FeatureFlagKey.IS_AI_CHAT_INBOX_ENABLED,
     metadata: {
-      label: 'Full-Page AI Chat',
+      label: 'Inbox',
       description:
-        'Open the AI chat as a full page, with the records it surfaces appearing in the side panel',
-      icon: 'IconSparkles',
+        'Share AI chat threads with teammates and triage them from a shared inbox',
+      icon: 'IconInbox',
     },
   },
   {
-    key: FeatureFlagKey.IS_CALENDAR_WEEK_VIEW_ENABLED,
+    key: FeatureFlagKey.IS_REST_METADATA_API_NEW_FORMAT_DIRECT,
     metadata: {
-      label: 'Calendar Day and Week Views',
+      label: 'New REST Metadata API Format',
       description:
-        'Display calendar records in daily or weekly layouts with optional end dates',
-      icon: 'IconCalendarWeek',
-    },
-  },
-  {
-    key: FeatureFlagKey.IS_JUNCTION_RELATIONS_ENABLED,
-    metadata: {
-      label: 'Junction Relations',
-      description:
-        'Enable many-to-many relations through junction tables configuration',
-      icon: 'IconRelationManyToMany',
-    },
-  },
-  {
-    key: FeatureFlagKey.IS_LIST_VIEW_ENABLED,
-    metadata: {
-      label: 'List View',
-      description:
-        'Display records in a list layout with collapsible groups and inline fields',
-      icon: 'IconList',
-    },
-  },
-  {
-    key: FeatureFlagKey.IS_SETTINGS_DISCOVERY_HERO_ENABLED,
-    metadata: {
-      label: 'Settings Discovery Hero',
-      description:
-        'Show the per-page hero illustration + video walkthrough modal on settings pages',
-      icon: 'IconSparkles',
+        'Return objects and fields from /rest/metadata without the legacy data.objects / data.fields wrapper. The legacy format will be discontinued on November 15, 2026.',
+      icon: 'IconApi',
     },
   },
   ...(process.env.CLOUDFLARE_API_KEY

@@ -5,7 +5,7 @@ export const BILLING_PRICE_LICENSED_FRAGMENT = gql`
     stripePriceId
     unitAmount
     recurringInterval
-    priceUsageType
     creditAmount
+    isSellable
   }
 `;

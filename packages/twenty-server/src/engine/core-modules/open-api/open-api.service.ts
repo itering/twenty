@@ -8,20 +8,20 @@ import {
   isDefined,
 } from 'twenty-shared/utils';
 
-import { DatabaseEventAction } from 'src/engine/api/graphql/graphql-query-runner/enums/database-event-action';
+import { DatabaseEventAction } from 'src/engine/workspace-event-emitter/enums/database-event-action';
 import { AccessTokenService } from 'src/engine/core-modules/auth/token/services/access-token.service';
-import { baseSchema } from 'src/engine/core-modules/open-api/utils/base-schema.utils';
+import { baseSchema } from 'src/engine/core-modules/open-api/utils/base-schema.util';
 import {
   computeMetadataSchemaComponents,
   computeParameterComponents,
   computeSchemaComponents,
-} from 'src/engine/core-modules/open-api/utils/components.utils';
-import { computeSchemaTags } from 'src/engine/core-modules/open-api/utils/compute-schema-tags.utils';
-import { computeWebhooks } from 'src/engine/core-modules/open-api/utils/computeWebhooks.utils';
+} from 'src/engine/core-modules/open-api/utils/components.util';
+import { computeSchemaTags } from 'src/engine/core-modules/open-api/utils/compute-schema-tags.util';
+import { computeWebhooks } from 'src/engine/core-modules/open-api/utils/computeWebhooks.util';
 import {
   get400ErrorResponses,
   get401ErrorResponses,
-} from 'src/engine/core-modules/open-api/utils/get-error-responses.utils';
+} from 'src/engine/core-modules/open-api/utils/get-error-responses.util';
 import {
   computeBatchPath,
   computeDuplicatesResultPath,
@@ -31,18 +31,18 @@ import {
   computeRestoreManyResultPath,
   computeRestoreOneResultPath,
   computeSingleResultPath,
-} from 'src/engine/core-modules/open-api/utils/path.utils';
+} from 'src/engine/core-modules/open-api/utils/path.util';
 import {
   getRequestBody,
   getUpdateRequestBody,
-} from 'src/engine/core-modules/open-api/utils/request-body.utils';
+} from 'src/engine/core-modules/open-api/utils/request-body.util';
 import {
   getCreateOneResponse201,
   getDeleteResponse200,
   getFindManyResponse200,
   getFindOneResponse200,
   getUpdateOneResponse200,
-} from 'src/engine/core-modules/open-api/utils/responses.utils';
+} from 'src/engine/core-modules/open-api/utils/responses.util';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { WorkspaceNotFoundDefaultError } from 'src/engine/core-modules/workspace/workspace.exception';
 import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
@@ -71,11 +71,19 @@ export class OpenApiService {
   }
 
   private async getFlatObjectMetadataArray(workspaceId: string) {
-    const { flatObjectMetadataMaps, flatFieldMetadataMaps } =
+    const {
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+      flatFieldMetadataOptionMaps,
+    } =
       await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
         {
           workspaceId,
-          flatMapsKeys: ['flatObjectMetadataMaps', 'flatFieldMetadataMaps'],
+          flatMapsKeys: [
+            'flatObjectMetadataMaps',
+            'flatFieldMetadataMaps',
+            'flatFieldMetadataOptionMaps',
+          ],
         },
       );
 
@@ -91,6 +99,7 @@ export class OpenApiService {
       flatObjectMetadataArray,
       flatObjectMetadataMaps,
       flatFieldMetadataMaps,
+      flatFieldMetadataOptionMaps,
     };
   }
 
@@ -112,6 +121,7 @@ export class OpenApiService {
       flatObjectMetadataArray,
       flatObjectMetadataMaps,
       flatFieldMetadataMaps,
+      flatFieldMetadataOptionMaps,
     } = await this.getFlatObjectMetadataArray(workspace.id);
 
     if (!flatObjectMetadataArray.length) {
@@ -119,46 +129,16 @@ export class OpenApiService {
     }
 
     schema.paths = flatObjectMetadataArray.reduce((paths, item) => {
-      paths[`/${item.namePlural}`] = computeManyResultPath(
-        item,
-        flatObjectMetadataMaps,
-        flatFieldMetadataMaps,
-      );
-      paths[`/batch/${item.namePlural}`] = computeBatchPath(
-        item,
-        flatObjectMetadataMaps,
-        flatFieldMetadataMaps,
-      );
-      paths[`/${item.namePlural}/{id}`] = computeSingleResultPath(
-        item,
-        flatObjectMetadataMaps,
-        flatFieldMetadataMaps,
-      );
-      paths[`/${item.namePlural}/duplicates`] = computeDuplicatesResultPath(
-        item,
-        flatObjectMetadataMaps,
-        flatFieldMetadataMaps,
-      );
-      paths[`/restore/${item.namePlural}/{id}`] = computeRestoreOneResultPath(
-        item,
-        flatObjectMetadataMaps,
-        flatFieldMetadataMaps,
-      );
-      paths[`/restore/${item.namePlural}`] = computeRestoreManyResultPath(
-        item,
-        flatObjectMetadataMaps,
-        flatFieldMetadataMaps,
-      );
-      paths[`/${item.namePlural}/merge`] = computeMergeManyResultPath(
-        item,
-        flatObjectMetadataMaps,
-        flatFieldMetadataMaps,
-      );
-      paths[`/${item.namePlural}/groupBy`] = computeGroupByResultPath(
-        item,
-        flatObjectMetadataMaps,
-        flatFieldMetadataMaps,
-      );
+      paths[`/${item.namePlural}`] = computeManyResultPath(item);
+      paths[`/batch/${item.namePlural}`] = computeBatchPath(item);
+      paths[`/${item.namePlural}/{id}`] = computeSingleResultPath(item);
+      paths[`/${item.namePlural}/duplicates`] =
+        computeDuplicatesResultPath(item);
+      paths[`/${item.namePlural}/{id}/restore`] =
+        computeRestoreOneResultPath(item);
+      paths[`/${item.namePlural}/restore`] = computeRestoreManyResultPath(item);
+      paths[`/${item.namePlural}/merge`] = computeMergeManyResultPath(item);
+      paths[`/${item.namePlural}/groupBy`] = computeGroupByResultPath(item);
 
       return paths;
     }, schema.paths as OpenAPIV3_1.PathsObject);
@@ -194,34 +174,19 @@ export class OpenApiService {
             DatabaseEventAction.CREATED,
             item.nameSingular,
           )
-        ] = computeWebhooks(
-          DatabaseEventAction.CREATED,
-          item,
-          flatObjectMetadataMaps,
-          flatFieldMetadataMaps,
-        );
+        ] = computeWebhooks(DatabaseEventAction.CREATED, item);
         paths[
           this.createWebhookEventName(
             DatabaseEventAction.UPDATED,
             item.nameSingular,
           )
-        ] = computeWebhooks(
-          DatabaseEventAction.UPDATED,
-          item,
-          flatObjectMetadataMaps,
-          flatFieldMetadataMaps,
-        );
+        ] = computeWebhooks(DatabaseEventAction.UPDATED, item);
         paths[
           this.createWebhookEventName(
             DatabaseEventAction.DELETED,
             item.nameSingular,
           )
-        ] = computeWebhooks(
-          DatabaseEventAction.DELETED,
-          item,
-          flatObjectMetadataMaps,
-          flatFieldMetadataMaps,
-        );
+        ] = computeWebhooks(DatabaseEventAction.DELETED, item);
 
         return paths;
       },
@@ -233,11 +198,12 @@ export class OpenApiService {
 
     schema.components = {
       ...schema.components, // components.securitySchemes is defined in base Schema
-      schemas: computeSchemaComponents(
-        flatObjectMetadataArray,
+      schemas: computeSchemaComponents({
+        flatObjectMetadataItems: flatObjectMetadataArray,
         flatObjectMetadataMaps,
         flatFieldMetadataMaps,
-      ),
+        flatFieldMetadataOptionMaps,
+      }),
       parameters: computeParameterComponents(),
       responses: {
         '400': get400ErrorResponses(),

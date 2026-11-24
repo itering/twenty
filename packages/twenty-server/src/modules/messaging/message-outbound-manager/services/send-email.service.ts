@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { type ActorMetadata } from 'twenty-shared/types';
 
 import { type ComposedEmail } from 'src/engine/core-modules/tool/tools/email-tool/types/composed-email.type';
 import { MessagingDraftSendService } from 'src/modules/messaging/message-outbound-manager/services/messaging-draft-send.service';
@@ -62,6 +63,7 @@ export class SendEmailService {
 
   private toSendMessageInput(data: ComposedEmail): SendMessageInput {
     return {
+      fromHandle: data.fromHandle,
       to: data.recipients.to,
       cc: data.recipients.cc.length > 0 ? data.recipients.cc : undefined,
       bcc: data.recipients.bcc.length > 0 ? data.recipients.bcc : undefined,
@@ -75,11 +77,17 @@ export class SendEmailService {
     };
   }
 
-  async persistSentMessage(
-    sendResult: SendMessageResult,
-    data: ComposedEmail,
-    workspaceId: string,
-  ): Promise<PersistedSentMessage | undefined> {
+  async persistSentMessage({
+    sendResult,
+    data,
+    workspaceId,
+    createdBy,
+  }: {
+    sendResult: SendMessageResult;
+    data: ComposedEmail;
+    workspaceId: string;
+    createdBy?: ActorMetadata;
+  }): Promise<PersistedSentMessage | undefined> {
     try {
       return await this.sentMessagePersistenceService.persistSentMessage({
         sendResult,
@@ -91,6 +99,8 @@ export class SendEmailService {
         inReplyTo: data.inReplyTo,
         parentThreadExternalId: data.threadExternalId,
         workspaceId,
+        attachments: data.attachments,
+        createdBy,
       });
     } catch (persistenceError) {
       this.logger.warn(

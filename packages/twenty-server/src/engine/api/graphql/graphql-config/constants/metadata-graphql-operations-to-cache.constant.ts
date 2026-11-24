@@ -10,9 +10,11 @@ export const METADATA_GRAPHQL_OPERATIONS_TO_CACHE: Record<
     dependencies: [
       'flatObjectMetadataMaps',
       'flatFieldMetadataMaps',
+      'flatFieldMetadataOptionMaps',
       'flatIndexMaps',
       'flatSearchFieldMetadataMaps',
       'flatApplicationMaps',
+      'featureFlagsMap',
     ],
   },
   [FIND_ALL_VIEWS_GRAPHQL_OPERATION]: {
@@ -26,6 +28,7 @@ export const METADATA_GRAPHQL_OPERATIONS_TO_CACHE: Record<
       'flatViewSortMaps',
       'flatViewGroupMaps',
       'flatObjectMetadataMaps',
+      'flatFieldMetadataMaps',
       'flatApplicationMaps',
     ],
   },

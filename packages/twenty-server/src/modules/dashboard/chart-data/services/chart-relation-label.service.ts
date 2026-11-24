@@ -8,10 +8,8 @@ import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/typ
 import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
 import { buildFieldMapsFromFlatObjectMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
 import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
-import { GlobalWorkspaceOrmManager } from 'src/engine/twenty-orm/global-workspace-datasource/global-workspace-orm.manager';
-import { getWorkspaceContext } from 'src/engine/twenty-orm/storage/orm-workspace-context.storage';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
 import { formatResult } from 'src/engine/twenty-orm/utils/format-result.util';
-import { resolveRolePermissionConfig } from 'src/engine/twenty-orm/utils/resolve-role-permission-config.util';
 import { CHART_RELATION_LABEL_BATCH_SIZE } from 'src/modules/dashboard/chart-data/constants/chart-relation-label-batch-size.constant';
 import { type ChartRelationLabelAxisInput } from 'src/modules/dashboard/chart-data/types/chart-relation-label-axis-input.type';
 import { type GroupByRawResult } from 'src/modules/dashboard/chart-data/types/group-by-raw-result.type';
@@ -25,7 +23,6 @@ type ResolveRelationLabelsParams = {
   rawResults: GroupByRawResult[];
   primaryAxis: ChartRelationLabelAxisInput;
   secondaryAxis?: ChartRelationLabelAxisInput;
-  workspaceId: string;
   authContext: WorkspaceAuthContext;
   flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
   flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
@@ -35,15 +32,12 @@ type ResolveRelationLabelsParams = {
 export class ChartRelationLabelService {
   private readonly logger = new Logger(ChartRelationLabelService.name);
 
-  constructor(
-    private readonly globalWorkspaceOrmManager: GlobalWorkspaceOrmManager,
-  ) {}
+  constructor(private readonly workspaceOrmManager: WorkspaceOrmManager) {}
 
   async resolveRelationLabels({
     rawResults,
     primaryAxis,
     secondaryAxis,
-    workspaceId,
     authContext,
     flatObjectMetadataMaps,
     flatFieldMetadataMaps,
@@ -76,7 +70,6 @@ export class ChartRelationLabelService {
 
     const rawLabelsByTargetObjectId = await this.fetchRawLabelsPerTargetObject({
       resolvableAxes,
-      workspaceId,
       authContext,
       flatObjectMetadataMaps,
       flatFieldMetadataMaps,
@@ -110,13 +103,11 @@ export class ChartRelationLabelService {
 
   private async fetchRawLabelsPerTargetObject({
     resolvableAxes,
-    workspaceId,
     authContext,
     flatObjectMetadataMaps,
     flatFieldMetadataMaps,
   }: {
     resolvableAxes: ResolvableChartRelationAxis[];
-    workspaceId: string;
     authContext: WorkspaceAuthContext;
     flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
     flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
@@ -161,7 +152,6 @@ export class ChartRelationLabelService {
             targetFlatObjectMetadata,
             labelIdentifierColumnNames,
             recordIds: [...recordIds],
-            workspaceId,
             authContext,
             flatObjectMetadataMaps,
             flatFieldMetadataMaps,
@@ -186,7 +176,6 @@ export class ChartRelationLabelService {
     targetFlatObjectMetadata,
     labelIdentifierColumnNames,
     recordIds,
-    workspaceId,
     authContext,
     flatObjectMetadataMaps,
     flatFieldMetadataMaps,
@@ -194,29 +183,15 @@ export class ChartRelationLabelService {
     targetFlatObjectMetadata: FlatObjectMetadata;
     labelIdentifierColumnNames: string[];
     recordIds: string[];
-    workspaceId: string;
     authContext: WorkspaceAuthContext;
     flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
     flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
   }): Promise<Record<string, unknown>[]> {
     try {
-      return await this.globalWorkspaceOrmManager.executeInWorkspaceContext(
+      return await this.workspaceOrmManager.executeInWorkspaceContext(
         async () => {
-          const workspaceContext = getWorkspaceContext();
-          const rolePermissionConfig = resolveRolePermissionConfig({
-            authContext: workspaceContext.authContext,
-            userWorkspaceRoleMap: workspaceContext.userWorkspaceRoleMap,
-            apiKeyRoleMap: workspaceContext.apiKeyRoleMap,
-          });
-
-          if (!isDefined(rolePermissionConfig)) {
-            return [];
-          }
-
-          const repository = await this.globalWorkspaceOrmManager.getRepository(
-            workspaceId,
+          const repository = this.workspaceOrmManager.getRepository(
             targetFlatObjectMetadata.nameSingular,
-            rolePermissionConfig,
           );
 
           const alias = targetFlatObjectMetadata.nameSingular;
@@ -236,7 +211,7 @@ export class ChartRelationLabelService {
                 }
 
                 return queryBuilder
-                  .where(`${alias}.id IN (:...recordIdChunk)`, {
+                  .where(`"${alias}".id IN (:...recordIdChunk)`, {
                     recordIdChunk,
                   })
                   .getRawMany();

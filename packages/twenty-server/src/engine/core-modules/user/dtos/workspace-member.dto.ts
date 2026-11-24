@@ -36,6 +36,9 @@ export class WorkspaceMemberDTO {
   @Field({ nullable: false })
   colorScheme: string;
 
+  @Field({ nullable: false })
+  uiScale: string;
+
   @Field(() => OpenRecordIn, { nullable: false })
   openRecordIn: OpenRecordIn;
 
@@ -61,6 +64,9 @@ export class WorkspaceMemberDTO {
 
   @Field(() => [RoleDTO], { nullable: true })
   roles?: RoleDTO[];
+
+  @Field(() => UUIDScalarType)
+  userId: string;
 
   @Field(() => UUIDScalarType, { nullable: true })
   userWorkspaceId?: string;

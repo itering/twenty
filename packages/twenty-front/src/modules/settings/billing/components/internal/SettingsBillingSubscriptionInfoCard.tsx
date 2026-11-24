@@ -1,11 +1,18 @@
 import {
   BillingFieldRow,
+  IncludedBillingField,
+  type IncludedBillingFieldProps,
   ScheduledBillingChangeField,
   type ScheduledBillingChangeFieldProps,
 } from '@/settings/billing/components/internal/SettingsBillingCardField';
 import {
   StyledSettingsBillingCard,
+  StyledSettingsBillingCardFieldList,
+  StyledSettingsBillingCardFieldListWithDivider,
+  StyledSettingsBillingCardGridBody,
   StyledSettingsBillingCardHeader,
+  StyledSettingsBillingCardTitle,
+  StyledSettingsBillingCardTitleLabel,
 } from '@/settings/billing/components/internal/SettingsBillingCard';
 import { SettingsTextLink } from '@/settings/components/SettingsTextLink';
 import { WorkspaceMemberAvatarStack } from '@/workspace-member/components/WorkspaceMemberAvatarStack';
@@ -21,7 +28,7 @@ import {
   IconUserCircle,
   IconUsers,
 } from 'twenty-ui/icon';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 type BillingStatusTone = 'blue' | 'gray' | 'orange' | 'red' | 'sky';
 
@@ -50,31 +57,6 @@ const STATUS_PILL_COLORS: Record<
     color: themeCssVariables.color.sky11,
   },
 };
-
-const StyledSettingsBillingCardGridBody = styled.div`
-  display: grid;
-  gap: ${themeCssVariables.spacing[6]};
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  padding: ${themeCssVariables.spacing[4]} ${themeCssVariables.spacing[3]};
-
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const StyledPlanHeader = styled.div`
-  align-items: center;
-  display: flex;
-  gap: ${themeCssVariables.spacing[2]};
-  min-width: 0;
-`;
-
-const StyledPlanLabel = styled.span`
-  color: ${themeCssVariables.font.color.primary};
-  font-size: ${themeCssVariables.font.size.md};
-  font-weight: ${themeCssVariables.font.weight.medium};
-  white-space: nowrap;
-`;
 
 const StyledStatusPill = styled.span<{ tone: BillingStatusTone }>`
   align-items: center;
@@ -105,25 +87,6 @@ const StyledHeaderActions = styled.div`
   flex-wrap: wrap;
   gap: ${themeCssVariables.spacing[2]};
   justify-content: flex-end;
-`;
-
-const StyledBillingFieldList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: ${themeCssVariables.spacing[1]};
-  min-width: 0;
-`;
-
-const StyledBillingFieldListWithDivider = styled(StyledBillingFieldList)`
-  border-left: 1px solid ${themeCssVariables.background.transparent.light};
-  padding-left: ${themeCssVariables.spacing[6]};
-
-  @media (max-width: 640px) {
-    border-left: 0;
-    border-top: 1px solid ${themeCssVariables.background.transparent.light};
-    padding-left: 0;
-    padding-top: ${themeCssVariables.spacing[4]};
-  }
 `;
 
 const StyledBillingIntervalValue = styled.div`
@@ -184,6 +147,7 @@ type SettingsBillingSubscriptionInfoCardProps = {
   currentIntervalLabel: string;
   displayedSubscriptionDate?: string;
   headerActions: ReactNode;
+  includedPerSeatItems: IncludedBillingFieldProps[];
   isSubscriptionActionDisabled: boolean;
   onSwitchToMonthly: () => void;
   onSwitchToYearly: () => void;
@@ -214,6 +178,7 @@ export const SettingsBillingSubscriptionInfoCard = ({
   currentIntervalLabel,
   displayedSubscriptionDate,
   headerActions,
+  includedPerSeatItems,
   isSubscriptionActionDisabled,
   onSwitchToMonthly,
   onSwitchToYearly,
@@ -232,21 +197,24 @@ export const SettingsBillingSubscriptionInfoCard = ({
 }: SettingsBillingSubscriptionInfoCardProps) => {
   const { t } = useLingui();
   const hasScheduledChange = scheduledChangeItems.length > 0;
+  const hasIncludedPerSeatItems = includedPerSeatItems.length > 0;
 
   return (
     <StyledSettingsBillingCard>
       <StyledSettingsBillingCardHeader>
-        <StyledPlanHeader>
-          <StyledPlanLabel>{planLabel}</StyledPlanLabel>
+        <StyledSettingsBillingCardTitle>
+          <StyledSettingsBillingCardTitleLabel>
+            {planLabel}
+          </StyledSettingsBillingCardTitleLabel>
           <StyledStatusPill tone={statusDescriptor.tone}>
             <StyledStatusDot tone={statusDescriptor.tone} />
             {statusDescriptor.label}
           </StyledStatusPill>
-        </StyledPlanHeader>
+        </StyledSettingsBillingCardTitle>
         <StyledHeaderActions>{headerActions}</StyledHeaderActions>
       </StyledSettingsBillingCardHeader>
       <StyledSettingsBillingCardGridBody>
-        <StyledBillingFieldList>
+        <StyledSettingsBillingCardFieldList>
           <BillingFieldRow label={t`Seats`} Icon={IconUserCircle}>
             <WorkspaceMemberAvatarStack
               workspaceMembers={workspaceMembers}
@@ -264,11 +232,11 @@ export const SettingsBillingSubscriptionInfoCard = ({
                   </StyledBillingIntervalSeparator>
                   <SettingsTextLink
                     variant="secondary"
-                    title={t`Switch to yearly`}
+                    title={t`Switch to annual`}
                     onClick={onSwitchToYearly}
                     disabled={isSubscriptionActionDisabled}
                   >
-                    {t`Switch to yearly`}
+                    {t`Switch to annual`}
                   </SettingsTextLink>
                 </>
               )}
@@ -297,15 +265,15 @@ export const SettingsBillingSubscriptionInfoCard = ({
               {displayedSubscriptionDate}
             </BillingFieldRow>
           )}
-        </StyledBillingFieldList>
-        <StyledBillingFieldListWithDivider>
+        </StyledSettingsBillingCardFieldList>
+        <StyledSettingsBillingCardFieldListWithDivider>
           <BillingFieldRow label={t`Seats`} Icon={IconUsers}>
             {seatsSubtotalValue}
             {seatsSubtotalDetails && (
               <StyledSecondaryText>{seatsSubtotalDetails}</StyledSecondaryText>
             )}
           </BillingFieldRow>
-          <BillingFieldRow label={t`Credits`} Icon={IconCoins}>
+          <BillingFieldRow label={t`Credit pack`} Icon={IconCoins}>
             {creditsSubtotalValue}
             {creditsSubtotalDetails && (
               <StyledSecondaryText>
@@ -319,8 +287,27 @@ export const SettingsBillingSubscriptionInfoCard = ({
               <StyledSecondaryText>{totalIntervalSubtitle}</StyledSecondaryText>
             )}
           </BillingFieldRow>
-        </StyledBillingFieldListWithDivider>
+        </StyledSettingsBillingCardFieldListWithDivider>
       </StyledSettingsBillingCardGridBody>
+      {hasIncludedPerSeatItems && (
+        <>
+          <StyledScheduledChangeHeader>
+            <StyledScheduledChangeTitle>
+              {t`Included per seat`}
+            </StyledScheduledChangeTitle>
+          </StyledScheduledChangeHeader>
+          <StyledScheduledChangeGrid columns={includedPerSeatItems.length}>
+            {includedPerSeatItems.map((includedPerSeatItem) => (
+              <IncludedBillingField
+                Icon={includedPerSeatItem.Icon}
+                key={includedPerSeatItem.label}
+                label={includedPerSeatItem.label}
+                value={includedPerSeatItem.value}
+              />
+            ))}
+          </StyledScheduledChangeGrid>
+        </>
+      )}
       {hasScheduledChange && (
         <>
           <StyledScheduledChangeHeader>

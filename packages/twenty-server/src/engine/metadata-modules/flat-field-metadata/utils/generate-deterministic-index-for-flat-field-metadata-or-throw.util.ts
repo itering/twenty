@@ -1,4 +1,4 @@
-import { IndexType } from 'src/engine/metadata-modules/index-metadata/types/indexType.types';
+import { IndexType } from 'twenty-shared/types';
 import { generateDeterministicFlatIndexMetadataOrThrow } from 'src/engine/metadata-modules/index-metadata/utils/generate-deterministic-flat-index.util';
 import { type UniversalFlatFieldMetadata } from 'src/engine/workspace-manager/workspace-migration/universal-flat-entity/types/universal-flat-field-metadata.type';
 import { type UniversalFlatIndexMetadata } from 'src/engine/workspace-manager/workspace-migration/universal-flat-entity/types/universal-flat-index-metadata.type';
@@ -14,6 +14,7 @@ export const generateDeterministicIndexForFlatFieldMetadataOrThrow = ({
   flatObjectMetadata,
 }: GenerateDeterministicIndexForFlatFieldMetadataOrThrowArgs): UniversalFlatIndexMetadata => {
   const createdAt = new Date().toISOString();
+  const isUnique = flatFieldMetadata.isUnique ?? false;
 
   return generateDeterministicFlatIndexMetadataOrThrow({
     flatObjectMetadata,
@@ -31,9 +32,8 @@ export const generateDeterministicIndexForFlatFieldMetadataOrThrow = ({
         },
       ],
       indexType: IndexType.BTREE,
-      indexWhereClause: null,
-      isCustom: true,
-      isUnique: flatFieldMetadata.isUnique ?? false,
+      indexWhereClause: isUnique ? '"deletedAt" IS NULL' : null,
+      isUnique,
       isSystemSideEffect: true,
       objectMetadataUniversalIdentifier: flatObjectMetadata.universalIdentifier,
       updatedAt: createdAt,

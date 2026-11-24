@@ -19,8 +19,6 @@ const UNIVERSAL_IDENTIFIERS_TO_FIX = new Set<string>([
   STANDARD_COMMAND_MENU_ITEMS.composeEmailToCompany.universalIdentifier,
   STANDARD_COMMAND_MENU_ITEMS.composeEmailToOpportunity.universalIdentifier,
   STANDARD_COMMAND_MENU_ITEMS.goToSettingsAccounts.universalIdentifier,
-  STANDARD_COMMAND_MENU_ITEMS.goToSettingsAccountsEmails.universalIdentifier,
-  STANDARD_COMMAND_MENU_ITEMS.goToSettingsAccountsCalendars.universalIdentifier,
   STANDARD_COMMAND_MENU_ITEMS.goToSettingsGeneral.universalIdentifier,
   STANDARD_COMMAND_MENU_ITEMS.goToSettingsObjects.universalIdentifier,
   STANDARD_COMMAND_MENU_ITEMS.goToSettingsMembers.universalIdentifier,
@@ -129,6 +127,7 @@ export class GateDefaultCommandMenuItemsByPermissionFlagCommand extends Provisio
     const validateAndBuildResult =
       await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunLegacyWorkspaceMigration(
         {
+          shouldDeferActions: false,
           allFlatEntityOperationByMetadataName: {
             commandMenuItem: {
               flatEntityToCreate: [],

@@ -2,7 +2,6 @@ import { currentUserState } from '@/auth/states/currentUserState';
 import { billingState } from '@/client-config/states/billingState';
 import { SETTINGS_ADMIN_TABS } from '@/settings/admin-panel/constants/SettingsAdminTabs';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
-import { t } from '@lingui/core/macro';
 import {
   IconApps,
   IconHeart,
@@ -11,8 +10,10 @@ import {
   IconSparkles,
   IconVariable,
 } from 'twenty-ui/icon';
+import { useLingui } from '@lingui/react/macro';
 
 export const useSettingsAdminTabs = () => {
+  const { t } = useLingui();
   const currentUser = useAtomStateValue(currentUserState);
   const billing = useAtomStateValue(billingState);
 
@@ -54,8 +55,8 @@ export const useSettingsAdminTabs = () => {
     ...(!isBillingEnabled
       ? [
           {
-            id: SETTINGS_ADMIN_TABS.ENTERPRISE,
-            title: t`Enterprise`,
+            id: SETTINGS_ADMIN_TABS.ORGANIZATION,
+            title: t`Organization`,
             Icon: IconKey,
             disabled: !canAccessFullAdminPanel && !canImpersonate,
           },

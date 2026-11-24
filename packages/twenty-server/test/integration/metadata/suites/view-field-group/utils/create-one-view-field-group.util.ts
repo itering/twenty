@@ -1,4 +1,4 @@
-import { makeMetadataAPIRequest } from 'test/integration/metadata/suites/utils/make-metadata-api-request.util';
+import { makeMetadataApiRequest } from 'test/integration/metadata/suites/utils/make-metadata-api-request.util';
 import { createViewFieldGroupQueryFactory } from 'test/integration/metadata/suites/view-field-group/utils/create-view-field-group-query-factory.util';
 import { type CommonResponseBody } from 'test/integration/metadata/types/common-response-body.type';
 import { type PerformMetadataQueryParams } from 'test/integration/metadata/types/perform-metadata-query.type';
@@ -12,6 +12,7 @@ export const createOneViewFieldGroup = async ({
   input,
   gqlFields,
   expectToFail,
+  token,
 }: PerformMetadataQueryParams<CreateViewFieldGroupInput>): CommonResponseBody<{
   createViewFieldGroup: ViewFieldGroupDTO;
 }> => {
@@ -20,7 +21,7 @@ export const createOneViewFieldGroup = async ({
     gqlFields,
   });
 
-  const response = await makeMetadataAPIRequest(graphqlOperation);
+  const response = await makeMetadataApiRequest(graphqlOperation, token);
 
   if (expectToFail === true) {
     warnIfNoErrorButExpectedToFail({

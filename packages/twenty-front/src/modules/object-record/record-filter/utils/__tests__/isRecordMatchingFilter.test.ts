@@ -735,6 +735,174 @@ describe('isRecordMatchingFilter', () => {
       ).toBe(false);
     });
 
+    it('matches a to-many relation when any loaded related record satisfies the nested filter', () => {
+      const personMockObjectMetadataItem = objectMetadataItems.find(
+        (item) => item.nameSingular === 'person',
+      )!;
+
+      const filter = {
+        pointOfContactForOpportunities: {
+          id: { eq: opportunityWithPointOfContact.id },
+        },
+      } as RecordGqlOperationFilter;
+
+      const personWithOpportunities = {
+        id: personId,
+        pointOfContactForOpportunities: [
+          { id: '20202020-0000-4000-8000-000000000001' },
+          { id: opportunityWithPointOfContact.id },
+        ],
+      };
+
+      expect(
+        isRecordMatchingFilter({
+          record: personWithOpportunities,
+          filter,
+          objectMetadataItem: personMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(true);
+
+      expect(
+        isRecordMatchingFilter({
+          record: {
+            ...personWithOpportunities,
+            pointOfContactForOpportunities: [],
+          },
+          filter,
+          objectMetadataItem: personMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+    });
+
+    it('compares a related record field with a field of the record the filter starts from', () => {
+      const personMockObjectMetadataItem = objectMetadataItems.find(
+        (item) => item.nameSingular === 'person',
+      )!;
+
+      const filter = {
+        pointOfContactForOpportunities: {
+          createdAt: { gtField: 'pointOfContact.createdAt' },
+        },
+      } as RecordGqlOperationFilter;
+
+      const matchesOpportunityCreatedAt = (createdAt: string) =>
+        isRecordMatchingFilter({
+          record: {
+            id: personId,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            pointOfContactForOpportunities: [
+              { id: opportunityWithPointOfContact.id, createdAt },
+            ],
+          },
+          filter,
+          objectMetadataItem: personMockObjectMetadataItem,
+          objectMetadataItems,
+        });
+
+      expect(matchesOpportunityCreatedAt('2026-02-01T00:00:00.000Z')).toBe(
+        true,
+      );
+      expect(matchesOpportunityCreatedAt('2025-12-01T00:00:00.000Z')).toBe(
+        false,
+      );
+    });
+
+    it('matches a to-many relation held as a connection, the way records reach the optimistic effects', () => {
+      const personMockObjectMetadataItem = objectMetadataItems.find(
+        (item) => item.nameSingular === 'person',
+      )!;
+
+      const filter = {
+        pointOfContactForOpportunities: {
+          id: { eq: opportunityWithPointOfContact.id },
+        },
+      } as RecordGqlOperationFilter;
+
+      const buildPersonWithOpportunityConnection = (
+        opportunityIds: string[],
+      ) => ({
+        id: personId,
+        pointOfContactForOpportunities: {
+          __typename: 'OpportunityConnection',
+          edges: opportunityIds.map((id) => ({
+            __typename: 'OpportunityEdge',
+            node: { id },
+          })),
+        },
+      });
+
+      expect(
+        isRecordMatchingFilter({
+          record: buildPersonWithOpportunityConnection([
+            '20202020-0000-4000-8000-000000000001',
+            opportunityWithPointOfContact.id,
+          ]),
+          filter,
+          objectMetadataItem: personMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(true);
+
+      expect(
+        isRecordMatchingFilter({
+          record: buildPersonWithOpportunityConnection([]),
+          filter,
+          objectMetadataItem: personMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+
+      expect(
+        isRecordMatchingFilter({
+          record: { id: personId },
+          filter,
+          objectMetadataItem: personMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+    });
+
+    it('reads a join column filter from the related record when the column is not loaded', () => {
+      const personMockObjectMetadataItem = objectMetadataItems.find(
+        (item) => item.nameSingular === 'person',
+      )!;
+
+      const filter = {
+        pointOfContactForOpportunities: {
+          pointOfContactId: { in: [personId] },
+        },
+      } as RecordGqlOperationFilter;
+
+      const buildPersonWithOpportunityPointOfContact = (
+        pointOfContact: { id: string } | null,
+      ) => ({
+        id: personId,
+        pointOfContactForOpportunities: [
+          { id: opportunityWithPointOfContact.id, pointOfContact },
+        ],
+      });
+
+      expect(
+        isRecordMatchingFilter({
+          record: buildPersonWithOpportunityPointOfContact({ id: personId }),
+          filter,
+          objectMetadataItem: personMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(true);
+
+      expect(
+        isRecordMatchingFilter({
+          record: buildPersonWithOpportunityPointOfContact(null),
+          filter,
+          objectMetadataItem: personMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+    });
+
     it('evaluates composite conditions against the related record', () => {
       const filter = {
         pointOfContact: {
@@ -824,7 +992,7 @@ describe('isRecordMatchingFilter', () => {
       ).toBe(true);
     });
 
-    it('does not match a nested filter on a list of related records', () => {
+    it('matches a nested filter on a list of related records when one of them satisfies it', () => {
       const filter = {
         people: { id: { eq: personId } },
       } as RecordGqlOperationFilter;
@@ -838,6 +1006,155 @@ describe('isRecordMatchingFilter', () => {
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
           objectMetadataItems,
+        }),
+      ).toBe(true);
+
+      expect(
+        isRecordMatchingFilter({
+          record: {
+            ...companiesMock[0],
+            people: [{ id: '20202020-0000-4000-8000-000000000001' }],
+          },
+          filter,
+          objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+    });
+  });
+
+  describe('Emails, Phones and Links sub-fields', () => {
+    const personMockObjectMetadataItem = objectMetadataItems.find(
+      (item) => item.nameSingular === 'person',
+    )!;
+
+    const buildPerson = ({
+      additionalEmails = [],
+      primaryPhoneCallingCode = '+1',
+      additionalPhones = [],
+      secondaryLinks = [],
+    }: {
+      additionalEmails?: string[];
+      primaryPhoneCallingCode?: string;
+      additionalPhones?: { number: string; callingCode: string }[];
+      secondaryLinks?: { url: string; label: string }[];
+    }) => ({
+      id: 'person-id',
+      emails: { primaryEmail: 'jane@example.com', additionalEmails },
+      phones: {
+        primaryPhoneNumber: '612345678',
+        primaryPhoneCountryCode: 'US',
+        primaryPhoneCallingCode,
+        additionalPhones,
+      },
+      linkedinLink: {
+        primaryLinkUrl: 'https://linkedin.com/in/jane',
+        primaryLinkLabel: '',
+        secondaryLinks,
+      },
+    });
+
+    const isMatching = ({
+      record,
+      filter,
+    }: {
+      record: ReturnType<typeof buildPerson>;
+      filter: RecordGqlOperationFilter;
+    }) =>
+      isRecordMatchingFilter({
+        record,
+        filter,
+        objectMetadataItem: personMockObjectMetadataItem,
+        objectMetadataItems,
+      });
+
+    it('matches a filter on additional emails', () => {
+      const filter = { emails: { additionalEmails: { like: '%acme%' } } };
+
+      expect(
+        isMatching({
+          record: buildPerson({ additionalEmails: ['jane@acme.com'] }),
+          filter,
+        }),
+      ).toBe(true);
+      expect(isMatching({ record: buildPerson({}), filter })).toBe(false);
+    });
+
+    it('matches a filter on the primary phone calling code and additional phones', () => {
+      expect(
+        isMatching({
+          record: buildPerson({ primaryPhoneCallingCode: '+33' }),
+          filter: {
+            phones: { primaryPhoneCallingCode: { like: '%33%' } },
+          },
+        }),
+      ).toBe(true);
+      expect(
+        isMatching({
+          record: buildPerson({
+            additionalPhones: [{ number: '611223344', callingCode: '+44' }],
+          }),
+          filter: { phones: { additionalPhones: { like: '%611223344%' } } },
+        }),
+      ).toBe(true);
+      expect(
+        isMatching({
+          record: buildPerson({}),
+          filter: {
+            phones: { additionalPhones: { like: '%611223344%' } },
+          },
+        }),
+      ).toBe(false);
+    });
+
+    it('matches a filter on secondary links', () => {
+      const filter = {
+        linkedinLink: { secondaryLinks: { like: '%github.com%' } },
+      };
+
+      expect(
+        isMatching({
+          record: buildPerson({
+            secondaryLinks: [{ url: 'https://github.com/jane', label: '' }],
+          }),
+          filter,
+        }),
+      ).toBe(true);
+      expect(isMatching({ record: buildPerson({}), filter })).toBe(false);
+    });
+
+    it('requires every sub-field filter to match, like the server', () => {
+      expect(
+        isMatching({
+          record: buildPerson({ additionalEmails: ['jane@acme.com'] }),
+          filter: {
+            emails: {
+              primaryEmail: { like: '%example%' },
+              additionalEmails: { like: '%acme%' },
+            },
+          },
+        }),
+      ).toBe(true);
+      expect(
+        isMatching({
+          record: buildPerson({}),
+          filter: {
+            emails: {
+              primaryEmail: { like: '%example%' },
+              additionalEmails: { like: '%acme%' },
+            },
+          },
+        }),
+      ).toBe(false);
+      expect(
+        isMatching({
+          record: buildPerson({}),
+          filter: {
+            linkedinLink: {
+              primaryLinkUrl: { like: '%linkedin.com%' },
+              primaryLinkLabel: { like: '%Jane%' },
+            },
+          },
         }),
       ).toBe(false);
     });

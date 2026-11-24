@@ -7,17 +7,17 @@ import { currentUserState } from '@/auth/states/currentUserState';
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { useCanEditProfileField } from '@/settings/profile/hooks/useCanEditProfileField';
-import { useUpdateWorkspaceMemberSettings } from '@/settings/profile/hooks/useUpdateWorkspaceMemberSettings';
+import { useUpdateWorkspaceMemberSettings } from '@/workspace-member/hooks/useUpdateWorkspaceMemberSettings';
 import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { themeCssVariables } from 'twenty-ui/theme';
 import { logError } from '~/utils/logError';
+import { WORKSPACE_MEMBER_NAME_MAX_LENGTH } from 'twenty-shared/constants';
+import { doNotTranslate } from 'twenty-shared/i18n';
 
 const StyledComboInputContainer = styled.div`
   display: flex;
   flex-direction: row;
-  > * + * {
-    margin-left: ${themeCssVariables.spacing[4]};
-  }
+  gap: ${themeCssVariables.spacing[4]};
 `;
 
 type NameFieldsProps = {
@@ -44,7 +44,7 @@ export const NameFields = ({ autoSave = true }: NameFieldsProps) => {
   const debouncedUpdate = useDebouncedCallback(async () => {
     try {
       if (!currentWorkspaceMember?.id) {
-        throw new Error('User is not logged in');
+        throw new Error(doNotTranslate('User is not logged in'));
       }
 
       if (autoSave) {
@@ -104,6 +104,7 @@ export const NameFields = ({ autoSave = true }: NameFieldsProps) => {
         value={firstName}
         onChange={setFirstName}
         placeholder={t`Tim`}
+        maxLength={WORKSPACE_MEMBER_NAME_MAX_LENGTH}
         fullWidth
         disabled={!canEditFirstName}
       />
@@ -113,6 +114,7 @@ export const NameFields = ({ autoSave = true }: NameFieldsProps) => {
         value={lastName}
         onChange={setLastName}
         placeholder={t`Cook`}
+        maxLength={WORKSPACE_MEMBER_NAME_MAX_LENGTH}
         fullWidth
         disabled={!canEditLastName}
       />

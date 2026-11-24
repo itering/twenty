@@ -5,7 +5,7 @@ import {
   QUERY_MAX_RECORDS,
 } from 'twenty-shared/constants';
 
-import { type AuthenticatedRequest } from 'src/engine/api/rest/types/authenticated-request';
+import { type AuthenticatedRequest } from 'src/engine/api/rest/types/authenticated-request.type';
 import { isMetadataRestRequest } from 'src/engine/api/rest/metadata/utils/is-metadata-rest-request.util';
 import { paginateMetadataRestItems } from 'src/engine/api/rest/metadata/utils/paginate-metadata-rest-items.util';
 import { parseMetadataRestPagination } from 'src/engine/api/rest/metadata/utils/parse-metadata-rest-pagination.util';
@@ -14,9 +14,7 @@ const UUID_A = '00000000-0000-4000-8000-00000000000a';
 const UUID_B = '00000000-0000-4000-8000-00000000000b';
 const UUID_C = '00000000-0000-4000-8000-00000000000c';
 
-const requestWithQuery = (
-  query: Record<string, string>,
-): AuthenticatedRequest => ({ query }) as unknown as AuthenticatedRequest;
+const requestWithQuery = (query: Record<string, string>) => ({ query });
 
 describe('paginateMetadataRestItems', () => {
   it('uses the shared REST default and maximum page size', () => {

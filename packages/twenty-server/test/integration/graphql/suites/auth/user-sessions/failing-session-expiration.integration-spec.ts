@@ -12,15 +12,11 @@ import { UserSessionEntity } from 'src/engine/core-modules/user-session/user-ses
 import { hashUserSessionToken } from 'src/engine/core-modules/user-session/utils/hash-user-session-token.util';
 
 import { ALLOWED_ORIGIN } from 'test/integration/graphql/suites/auth/user-sessions/constants/session-origins.constants';
-import { setupDatabaseConfigOverrideForSuite } from 'test/integration/graphql/suites/auth/user-sessions/utils/setup-database-config-override.util';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-// Sessions created here are never resolved before the row is tampered with,
-// so the read-through cache holds no entry and the checks hit the database.
+// Never resolved before tampering, so the read-through cache is empty and checks hit the database.
 describe('failing session expiration (integration)', () => {
-  setupDatabaseConfigOverrideForSuite('AUTH_COOKIE_SESSIONS_ENABLED', true);
-
   const signInAndTamper = async (
     tamper: Partial<Pick<UserSessionEntity, 'expiresAt' | 'lastActiveAt'>>,
   ): Promise<string> => {
@@ -65,8 +61,7 @@ describe('failing session expiration (integration)', () => {
   });
 
   it('should reject a session past the idle timeout and clear the cookie', async () => {
-    // 31 days idle exceeds the 30d SESSION_IDLE_TIMEOUT while the absolute
-    // 180d lifetime is still far in the future.
+    // Past the 30d SESSION_IDLE_TIMEOUT but well within the 180d absolute lifetime.
     const sessionCookieHeader = await signInAndTamper({
       lastActiveAt: new Date(Date.now() - 31 * ONE_DAY_MS),
     });

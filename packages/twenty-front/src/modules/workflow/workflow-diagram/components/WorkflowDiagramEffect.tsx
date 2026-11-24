@@ -1,3 +1,4 @@
+import { TRIGGER_STEP_ID } from 'twenty-shared/workflow';
 import { useAtomComponentStateCallbackState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateCallbackState';
 import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 import { useAtomFamilyState } from '@/ui/utilities/state/jotai/hooks/useAtomFamilyState';
@@ -6,6 +7,12 @@ import { useWorkflowWithCurrentVersion } from '@/workflow/hooks/useWorkflowWithC
 import { flowComponentState } from '@/workflow/states/flowComponentState';
 import { shouldWorkflowRefetchRequestFamilyState } from '@/workflow/states/shouldWorkflowRefetchRequestFamilyState';
 import { workflowLastCreatedStepIdComponentState } from '@/workflow/states/workflowLastCreatedStepIdComponentState';
+import { workflowFailedFlowKeysComponentState } from '@/workflow/states/workflowFailedFlowKeysComponentState';
+import { workflowFlowSaveDraftVersionIdComponentState } from '@/workflow/states/workflowFlowSaveDraftVersionIdComponentState';
+import { workflowFlowSaveInProgressComponentState } from '@/workflow/states/workflowFlowSaveInProgressComponentState';
+import { workflowPendingFlowKeysComponentState } from '@/workflow/states/workflowPendingFlowKeysComponentState';
+import { useSavePendingWorkflowFlow } from '@/workflow/hooks/useSavePendingWorkflowFlow';
+import { buildFlowWithLocalEdits } from '@/workflow/utils/buildFlowWithLocalEdits';
 import { workflowVisualizerWorkflowIdComponentState } from '@/workflow/states/workflowVisualizerWorkflowIdComponentState';
 import {
   type WorkflowAction,
@@ -19,6 +26,7 @@ import { generateWorkflowDiagram } from '@/workflow/workflow-diagram/utils/gener
 import { mergeWorkflowDiagrams } from '@/workflow/workflow-diagram/utils/mergeWorkflowDiagrams';
 import { useStore } from 'jotai';
 import { useCallback, useEffect, useState } from 'react';
+import { logError } from '~/utils/logError';
 import { isDefined } from 'twenty-shared/utils';
 
 export const WorkflowDiagramEffect = () => {
@@ -35,7 +43,8 @@ export const WorkflowDiagramEffect = () => {
   );
   const setFlow = useSetAtomComponentState(flowComponentState);
   const flow = useAtomComponentStateValue(flowComponentState);
-  const { populateStepsOutputSchema } = useStepsOutputSchema();
+  const { populateStepsOutputSchema, deleteStepsOutputSchema } =
+    useStepsOutputSchema();
 
   const workflowLastCreatedStepId = useAtomComponentStateCallbackState(
     workflowLastCreatedStepIdComponentState,
@@ -44,9 +53,8 @@ export const WorkflowDiagramEffect = () => {
   const store = useStore();
   const currentVersion = workflowWithCurrentVersion?.currentVersion;
 
-  const { content, refetchContent } = useWorkflowVersionContent(
-    currentVersion?.id,
-  );
+  const { content, refetchContent, contentUpdatedAt } =
+    useWorkflowVersionContent(currentVersion?.id);
 
   const [shouldWorkflowRefetchRequest, setShouldWorkflowRefetchRequest] =
     useAtomFamilyState(
@@ -54,7 +62,27 @@ export const WorkflowDiagramEffect = () => {
       workflowVisualizerWorkflowId ?? '',
     );
 
-  const [seededVersionId, setSeededVersionId] = useState<string>();
+  const [shouldSeedFlowFromServer, setShouldSeedFlowFromServer] =
+    useState(false);
+  const [lastCurrentVersionId, setLastCurrentVersionId] = useState<string>();
+  const [seededVersionUpdatedAt, setSeededVersionUpdatedAt] =
+    useState<string>();
+
+  const pendingFlowKeys = useAtomComponentStateCallbackState(
+    workflowPendingFlowKeysComponentState,
+  );
+  const flowSaveInProgress = useAtomComponentStateCallbackState(
+    workflowFlowSaveInProgressComponentState,
+  );
+  const failedFlowKeys = useAtomComponentStateCallbackState(
+    workflowFailedFlowKeysComponentState,
+  );
+  const saveDraftVersionId = useAtomComponentStateCallbackState(
+    workflowFlowSaveDraftVersionIdComponentState,
+  );
+  const { savePendingWorkflowFlow } = useSavePendingWorkflowFlow();
+  const [previousDiagramUpdatedAt, setPreviousDiagramUpdatedAt] =
+    useState<string>();
   const [previousDiagramVersionId, setPreviousDiagramVersionId] =
     useState<string>();
 
@@ -105,21 +133,24 @@ export const WorkflowDiagramEffect = () => {
   );
 
   useEffect(() => {
-    if (!shouldWorkflowRefetchRequest) {
+    if (!shouldWorkflowRefetchRequest || !isDefined(currentVersion?.id)) {
       return;
     }
 
     setShouldWorkflowRefetchRequest(false);
 
-    void refetchContent()
+    void savePendingWorkflowFlow()
+      .then(() => refetchContent())
       .then(() => {
-        setSeededVersionId(undefined);
+        setShouldSeedFlowFromServer(true);
       })
-      .catch(() => {});
+      .catch(logError);
   }, [
+    currentVersion?.id,
     shouldWorkflowRefetchRequest,
     setShouldWorkflowRefetchRequest,
     refetchContent,
+    savePendingWorkflowFlow,
   ]);
 
   useEffect(() => {
@@ -131,18 +162,84 @@ export const WorkflowDiagramEffect = () => {
       return;
     }
 
-    if (seededVersionId === currentVersion.id) {
+    const isDraftVersion = currentVersion.status === 'DRAFT';
+
+    if (
+      !isDraftVersion &&
+      store.get(saveDraftVersionId) === currentVersion.id
+    ) {
+      store.set(saveDraftVersionId, undefined);
+    }
+
+    const hasCurrentVersionChanged = lastCurrentVersionId !== currentVersion.id;
+
+    if (!hasCurrentVersionChanged && !shouldSeedFlowFromServer) {
       return;
     }
 
-    setSeededVersionId(currentVersion.id);
+    setLastCurrentVersionId(currentVersion.id);
+    setShouldSeedFlowFromServer(false);
 
-    setFlow({
-      workflowVersionId: currentVersion.id,
-      trigger: content.trigger,
-      steps: content.steps,
-    });
-  }, [content, currentVersion, seededVersionId, setFlow]);
+    if (
+      isDefined(lastCurrentVersionId) &&
+      flow?.workflowVersionId === currentVersion.id &&
+      !shouldSeedFlowFromServer
+    ) {
+      return;
+    }
+
+    if (isDefined(contentUpdatedAt)) {
+      deleteStepsOutputSchema({
+        workflowVersionId: currentVersion.id,
+        stepIds: [
+          TRIGGER_STEP_ID,
+          ...(content.steps ?? []).map((step: WorkflowAction) => step.id),
+        ],
+      });
+    }
+    setSeededVersionUpdatedAt(contentUpdatedAt);
+
+    if (!isDraftVersion) {
+      store.set(pendingFlowKeys, []);
+      store.set(failedFlowKeys, []);
+    }
+
+    const flowSaveInProgressKeys = isDraftVersion
+      ? (store.get(flowSaveInProgress)?.flowKeys ?? [])
+      : [];
+
+    const localFlowKeys = [
+      ...store.get(pendingFlowKeys),
+      ...store.get(failedFlowKeys),
+      ...flowSaveInProgressKeys,
+    ];
+
+    setFlow((localFlow) =>
+      buildFlowWithLocalEdits({
+        serverFlow: {
+          workflowVersionId: currentVersion.id,
+          trigger: content.trigger,
+          steps: content.steps,
+        },
+        localFlow,
+        localFlowKeys,
+      }),
+    );
+  }, [
+    content,
+    currentVersion,
+    flow?.workflowVersionId,
+    lastCurrentVersionId,
+    shouldSeedFlowFromServer,
+    contentUpdatedAt,
+    setFlow,
+    deleteStepsOutputSchema,
+    store,
+    saveDraftVersionId,
+    pendingFlowKeys,
+    failedFlowKeys,
+    flowSaveInProgress,
+  ]);
 
   useEffect(() => {
     if (!isDefined(flow)) {
@@ -151,13 +248,16 @@ export const WorkflowDiagramEffect = () => {
 
     const isSameVersion = previousDiagramVersionId === flow.workflowVersionId;
     const isTransitionToDraft = currentVersion?.status === 'DRAFT';
-    const shouldPreservePositions = isSameVersion || isTransitionToDraft;
+    const shouldPreservePositions =
+      (isSameVersion || isTransitionToDraft) &&
+      previousDiagramUpdatedAt === seededVersionUpdatedAt;
 
     setPreviousDiagramVersionId(flow.workflowVersionId);
+    setPreviousDiagramUpdatedAt(seededVersionUpdatedAt);
 
     computeAndMergeNewWorkflowDiagram(flow, shouldPreservePositions);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [computeAndMergeNewWorkflowDiagram, flow]);
+  }, [computeAndMergeNewWorkflowDiagram, flow, seededVersionUpdatedAt]);
 
   useEffect(() => {
     if (!isDefined(currentVersion) || !isDefined(flow)) {

@@ -3,6 +3,7 @@ import { Controller, Get, Req, UseGuards } from '@nestjs/common';
 import { type Request } from 'express';
 import { ApiPath } from 'twenty-shared/types';
 
+import { OAUTH_PROTECTED_RESOURCE_PATHS } from 'src/engine/core-modules/application/application-oauth/constants/oauth-protected-resource-paths.constant';
 import { ALL_OAUTH_SCOPES } from 'src/engine/core-modules/application/application-oauth/constants/oauth-scopes';
 import { ApplicationRegistrationService } from 'src/engine/core-modules/application/application-registration/application-registration.service';
 import { DomainServerConfigService } from 'src/engine/core-modules/domain/domain-server-config/services/domain-server-config.service';
@@ -25,22 +26,24 @@ export class OAuthDiscoveryController {
   @UseGuards(PublicEndpointGuard, NoPermissionGuard)
   async getAuthorizationServerMetadata(@Req() request: Request) {
     const issuer = getRequestBaseUrl(request);
-    // /authorize is served by the frontend; SERVER_URL (API-only) has no such
-    // route, so we route the client to the default frontend base URL in that
-    // case. All other hosts (app.twenty.com, workspace subdomains, custom
-    // domains) serve both frontend and API.
+    // The API-only SERVER_URL has no frontend /authorize route
     const authorizeBase = this.isApiHost(request)
       ? cleanServerUrl(this.domainServerConfigService.getBaseUrl().toString())
       : issuer;
 
+    const authorizationEndpoint =
+      authorizeBase === issuer
+        ? `${issuer}/authorize`
+        : `${authorizeBase}/authorize?iss=${encodeURIComponent(issuer)}`;
+
     const cliRegistration =
-      await this.applicationRegistrationService.findOneByUniversalIdentifier(
-        TWENTY_CLI_APPLICATION_REGISTRATION.universalIdentifier,
+      await this.applicationRegistrationService.findOrCreateBuiltInRegistrationOrThrow(
+        TWENTY_CLI_APPLICATION_REGISTRATION,
       );
 
     return {
       issuer,
-      authorization_endpoint: `${authorizeBase}/authorize`,
+      authorization_endpoint: authorizationEndpoint,
       token_endpoint: `${issuer}/${ApiPath.OAuth}/token`,
       registration_endpoint: `${issuer}/${ApiPath.OAuth}/register`,
       revocation_endpoint: `${issuer}/${ApiPath.OAuth}/revoke`,
@@ -54,30 +57,26 @@ export class OAuthDiscoveryController {
         'refresh_token',
       ],
       code_challenge_methods_supported: ['S256'],
+      client_id_metadata_document_supported: true,
       token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
       revocation_endpoint_auth_methods_supported: ['client_secret_post'],
       introspection_endpoint_auth_methods_supported: ['client_secret_post'],
-      // RFC 9207: advertise `iss` in authorization responses to defend against
-      // OAuth mix-up attacks. Required by OAuth 2.1 security BCP.
+      // RFC 9207: advertise `iss` to defend against OAuth mix-up attacks
       authorization_response_iss_parameter_supported: true,
-      ...(cliRegistration
-        ? { cli_client_id: cliRegistration.oAuthClientId }
-        : {}),
+      cli_client_id: cliRegistration.oAuthClientId,
     };
   }
 
-  // RFC 9728 §3.2: the `resource` value MUST equal the resource identifier
-  // into which the well-known path suffix was inserted. So the root form maps
-  // to the origin as-a-resource, and the /mcp-suffixed form maps to
-  // <origin>/mcp. Strict clients probing the path-aware variant will reject
-  // mismatching metadata.
-
+  // RFC 9728 §3.2: `resource` must equal the identifier the well-known suffix was inserted into; strict clients reject a mismatch
   @Get('oauth-protected-resource')
   @UseGuards(PublicEndpointGuard, NoPermissionGuard)
   getProtectedResourceMetadataRoot(@Req() request: Request) {
     const base = getRequestBaseUrl(request);
 
-    return this.buildProtectedResourceMetadata(base, base);
+    return this.buildProtectedResourceMetadata(
+      base,
+      `${base}${OAUTH_PROTECTED_RESOURCE_PATHS.ROOT}`,
+    );
   }
 
   @Get('oauth-protected-resource/mcp')
@@ -85,7 +84,10 @@ export class OAuthDiscoveryController {
   getProtectedResourceMetadataMcp(@Req() request: Request) {
     const base = getRequestBaseUrl(request);
 
-    return this.buildProtectedResourceMetadata(base, `${base}/mcp`);
+    return this.buildProtectedResourceMetadata(
+      base,
+      `${base}${OAUTH_PROTECTED_RESOURCE_PATHS.MCP}`,
+    );
   }
 
   private buildProtectedResourceMetadata(base: string, resource: string) {

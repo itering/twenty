@@ -14,12 +14,12 @@ export const STATIC_WEBSITE_ROUTES: readonly WebsiteRoute[] = [
   },
   {
     changeFrequency: 'weekly',
-    description: msg`Extend Twenty with vetted apps — call recording, enrichment, Slack, Discord, Linear and more. Install any app on your open source CRM workspace in one click.`,
+    description: msg`Extend Twenty with apps — call recording, enrichment, Slack, Discord, Linear and more. Install any app on your open source CRM workspace in one click.`,
     id: 'apps',
     indexed: true,
     path: '/apps',
     priority: 0.8,
-    title: msg`Twenty Apps — Vetted Apps for the Open Source CRM`,
+    title: msg`Twenty Apps — Reviewed Apps for the Open Source CRM`,
   },
   {
     changeFrequency: 'monthly',
@@ -86,32 +86,21 @@ export const STATIC_WEBSITE_ROUTES: readonly WebsiteRoute[] = [
   },
   {
     changeFrequency: 'monthly',
-    description: msg`Find a certified Twenty partner to migrate, customise, and operate your open source CRM, or join the ecosystem and grow your practice with us.`,
+    description: msg`Tell us what you need and get matched with a certified Twenty partner in 48 hours, or browse the directory of agencies and consultants who migrate, customise, and operate the open source CRM.`,
     id: 'partners',
     indexed: true,
     path: '/partners',
     priority: 0.7,
-    title: msg`Twenty Partners — Certified Open Source CRM Implementers`,
+    title: msg`Find a Twenty Partner — Certified Open Source CRM Experts`,
   },
   {
-    changeFrequency: 'weekly',
-    description: msg`Browse Twenty's certified partners — the agencies and individuals who migrate, customise, host, and support the open source CRM across regions, languages, and deployment models.`,
-    id: 'partnersList',
+    changeFrequency: 'monthly',
+    description: msg`Become a Twenty integrator: implement the #1 open source CRM for your clients, earn 20% on the clients you bring, and grow into a Lead Integrator to receive client briefs.`,
+    id: 'partnersIntegrators',
     indexed: true,
-    path: '/partners/list',
+    path: '/partners/integrators',
     priority: 0.6,
-    title: msg`Find a Twenty Partner — Open Source CRM Marketplace`,
-  },
-  {
-    // The application form: noindex (a utility route, excluded from the
-    // sitemap by getIndexedWebsiteRoutes), reachable from the partner CTAs.
-    changeFrequency: 'yearly',
-    description: msg`Apply to join the Twenty partner ecosystem and grow your practice with the #1 open source CRM.`,
-    id: 'partnersApply',
-    indexed: false,
-    path: '/partners/apply',
-    priority: 0.3,
-    title: msg`Become a Twenty Partner — Apply`,
+    title: msg`Become a Twenty Integrator — Partner Program`,
   },
   {
     changeFrequency: 'yearly',
@@ -121,6 +110,24 @@ export const STATIC_WEBSITE_ROUTES: readonly WebsiteRoute[] = [
     path: '/partners/brief',
     priority: 0.3,
     title: msg`Submit a Client Brief — Twenty Partners`,
+  },
+  {
+    changeFrequency: 'monthly',
+    description: msg`Earn 20% of seat revenue for 12 months on every team you bring to Twenty Cloud. The creator program is for content creators, communities and tech partners.`,
+    id: 'partnersCreators',
+    indexed: true,
+    path: '/partners/creators',
+    priority: 0.6,
+    title: msg`Twenty Creator Program — Earn 20% on Every Referral`,
+  },
+  {
+    changeFrequency: 'yearly',
+    description: msg`The terms of the Twenty Partner Program for creators and integrators: qualified referrals, commissions, payouts and how you may promote Twenty.`,
+    id: 'partnersTerms',
+    indexed: false,
+    path: '/partners/terms',
+    priority: 0.3,
+    title: msg`Partner Program Terms | Twenty`,
   },
   {
     changeFrequency: 'monthly',
@@ -160,6 +167,15 @@ export const STATIC_WEBSITE_ROUTES: readonly WebsiteRoute[] = [
   },
   {
     changeFrequency: 'yearly',
+    description: msg`Get help with Twenty, whether you run it on our cloud or host it yourself, including the Twenty app for Slack.`,
+    id: 'support',
+    indexed: true,
+    path: '/support',
+    priority: 0.3,
+    title: msg`Support | Twenty`,
+  },
+  {
+    changeFrequency: 'yearly',
     description: msg`The terms governing your use of Twenty and its open source CRM services.`,
     id: 'terms',
     indexed: true,
@@ -168,19 +184,17 @@ export const STATIC_WEBSITE_ROUTES: readonly WebsiteRoute[] = [
     title: msg`Terms of Service | Twenty`,
   },
   {
-    // Post-checkout license activation: noindex (a utility route reached only
-    // with a Stripe ?session_id=, excluded from the sitemap).
+    // Reached only with a Stripe ?session_id=.
     changeFrequency: 'yearly',
-    description: msg`Activate your Twenty enterprise license after checkout and copy your key into your self-hosted instance.`,
+    description: msg`Activate your Twenty Organization license after checkout and copy your key into your self-hosted instance.`,
     id: 'enterpriseActivate',
     indexed: false,
-    path: '/enterprise/activate',
+    path: '/organization/activate',
     priority: 0.3,
-    title: msg`Enterprise Activation | Twenty`,
+    title: msg`Organization Activation | Twenty`,
   },
   {
-    // The interactive halftone generator: an internal dev tool, noindex and
-    // excluded from the sitemap (getIndexedWebsiteRoutes). Mounted client-only.
+    // Internal dev tool, mounted client-only.
     changeFrequency: 'monthly',
     description: msg`Interactive halftone generator exported from Twenty.`,
     id: 'halftone',

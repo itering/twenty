@@ -5,12 +5,16 @@ import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/typ
 import { type FlatNavigationMenuItemMaps } from 'src/engine/metadata-modules/flat-navigation-menu-item/types/flat-navigation-menu-item-maps.type';
 import { addFlatNavigationMenuItemToMapsAndUpdateIndex } from 'src/engine/metadata-modules/flat-navigation-menu-item/utils/add-flat-navigation-menu-item-to-maps-and-update-index.util';
 import { type FlatView } from 'src/engine/metadata-modules/flat-view/types/flat-view.type';
-import { STANDARD_NAVIGATION_MENU_ITEMS } from 'src/engine/workspace-manager/twenty-standard-application/constants/standard-navigation-menu-item.constant';
+import {
+  STANDARD_NAVIGATION_MENU_ITEM_DEFAULT_COLORS,
+  STANDARD_NAVIGATION_MENU_ITEMS,
+} from 'src/engine/workspace-manager/twenty-standard-application/constants/standard-navigation-menu-item.constant';
 import { createStandardNavigationMenuItemFlatMetadata } from 'src/engine/workspace-manager/twenty-standard-application/utils/navigation-menu-item/create-standard-navigation-menu-item-flat-metadata.util';
 import {
   createStandardNavigationMenuItemFolderFlatMetadata,
   createStandardNavigationMenuItemFolderItemFlatMetadata,
 } from 'src/engine/workspace-manager/twenty-standard-application/utils/navigation-menu-item/create-standard-navigation-menu-item-folder-flat-metadata.util';
+import { createStandardNavigationMenuItemSectionFlatMetadata } from 'src/engine/workspace-manager/twenty-standard-application/utils/navigation-menu-item/create-standard-navigation-menu-item-section-flat-metadata.util';
 
 const FLAT_NAVIGATION_MENU_ITEM_NAMES = [
   'allCompanies',
@@ -21,10 +25,18 @@ const FLAT_NAVIGATION_MENU_ITEM_NAMES = [
   'allTasks',
 ] as const;
 
-const WORKFLOWS_FOLDER_ITEM_NAMES = [
-  'workflowsFolderAllWorkflows',
-  'workflowsFolderAllWorkflowRuns',
-  'workflowsFolderAllWorkflowVersions',
+const FOLDERS = [
+  {
+    folderName: 'workflowsFolder',
+    itemNames: [
+      'workflowsFolderAllWorkflows',
+      'workflowsFolderAllWorkflowRuns',
+    ],
+  },
+  {
+    folderName: 'campaignsFolder',
+    itemNames: ['allMessageCampaigns', 'allMessageLists'],
+  },
 ] as const;
 
 export const buildStandardFlatNavigationMenuItemMaps = ({
@@ -42,8 +54,25 @@ export const buildStandardFlatNavigationMenuItemMaps = ({
 }): FlatNavigationMenuItemMaps => {
   const flatNavigationMenuItemMaps: FlatNavigationMenuItemMaps = {
     ...createEmptyFlatEntityMaps(),
-    byUserWorkspaceIdAndFolderId: {},
+    byUserWorkspaceIdAndParentId: {},
   };
+
+  const workspaceSectionDefinition =
+    STANDARD_NAVIGATION_MENU_ITEMS.workspaceSection;
+  const workspaceSection = createStandardNavigationMenuItemSectionFlatMetadata({
+    universalIdentifier: workspaceSectionDefinition.universalIdentifier,
+    name: workspaceSectionDefinition.name,
+    position: workspaceSectionDefinition.position,
+    navigationMenuItemId: v4(),
+    workspaceId,
+    twentyStandardApplicationId,
+    now,
+  });
+
+  addFlatNavigationMenuItemToMapsAndUpdateIndex({
+    flatNavigationMenuItem: workspaceSection,
+    flatNavigationMenuItemMaps,
+  });
 
   for (const navigationMenuItemName of FLAT_NAVIGATION_MENU_ITEM_NAMES) {
     const navigationMenuItemDefinition =
@@ -57,6 +86,7 @@ export const buildStandardFlatNavigationMenuItemMaps = ({
           navigationMenuItemDefinition.viewUniversalIdentifier,
         position: navigationMenuItemDefinition.position,
         navigationMenuItemId: v4(),
+        parent: workspaceSection,
         dependencyFlatEntityMaps: {
           flatViewMaps,
         },
@@ -71,47 +101,50 @@ export const buildStandardFlatNavigationMenuItemMaps = ({
     });
   }
 
-  const workflowsFolderDefinition =
-    STANDARD_NAVIGATION_MENU_ITEMS.workflowsFolder;
-  const workflowsFolderId = v4();
-  const workflowsFolder = createStandardNavigationMenuItemFolderFlatMetadata({
-    universalIdentifier: workflowsFolderDefinition.universalIdentifier,
-    name: workflowsFolderDefinition.name,
-    icon: workflowsFolderDefinition.icon,
-    position: workflowsFolderDefinition.position,
-    navigationMenuItemId: workflowsFolderId,
-    workspaceId,
-    twentyStandardApplicationId,
-    now,
-  });
-
-  addFlatNavigationMenuItemToMapsAndUpdateIndex({
-    flatNavigationMenuItem: workflowsFolder,
-    flatNavigationMenuItemMaps,
-  });
-
-  for (const folderItemName of WORKFLOWS_FOLDER_ITEM_NAMES) {
-    const folderItemDefinition = STANDARD_NAVIGATION_MENU_ITEMS[folderItemName];
-
-    const folderItem = createStandardNavigationMenuItemFolderItemFlatMetadata({
-      universalIdentifier: folderItemDefinition.universalIdentifier,
-      viewUniversalIdentifier: folderItemDefinition.viewUniversalIdentifier,
-      folderId: workflowsFolderId,
-      folderUniversalIdentifier: folderItemDefinition.folderUniversalIdentifier,
-      position: folderItemDefinition.position,
-      navigationMenuItemId: v4(),
+  for (const { folderName, itemNames } of FOLDERS) {
+    const folderDefinition = STANDARD_NAVIGATION_MENU_ITEMS[folderName];
+    const folderId = v4();
+    const folder = createStandardNavigationMenuItemFolderFlatMetadata({
+      universalIdentifier: folderDefinition.universalIdentifier,
+      name: folderDefinition.name,
+      icon: folderDefinition.icon,
+      color: STANDARD_NAVIGATION_MENU_ITEM_DEFAULT_COLORS[folderName] ?? null,
+      position: folderDefinition.position,
+      navigationMenuItemId: folderId,
+      parent: workspaceSection,
       workspaceId,
       twentyStandardApplicationId,
-      dependencyFlatEntityMaps: {
-        flatViewMaps,
-      },
       now,
     });
 
     addFlatNavigationMenuItemToMapsAndUpdateIndex({
-      flatNavigationMenuItem: folderItem,
+      flatNavigationMenuItem: folder,
       flatNavigationMenuItemMaps,
     });
+
+    for (const folderItemName of itemNames) {
+      const folderItemDefinition =
+        STANDARD_NAVIGATION_MENU_ITEMS[folderItemName];
+
+      const folderItem = createStandardNavigationMenuItemFolderItemFlatMetadata(
+        {
+          ...folderItemDefinition,
+          folderId,
+          navigationMenuItemId: v4(),
+          workspaceId,
+          twentyStandardApplicationId,
+          dependencyFlatEntityMaps: {
+            flatViewMaps,
+          },
+          now,
+        },
+      );
+
+      addFlatNavigationMenuItemToMapsAndUpdateIndex({
+        flatNavigationMenuItem: folderItem,
+        flatNavigationMenuItemMaps,
+      });
+    }
   }
 
   return flatNavigationMenuItemMaps;

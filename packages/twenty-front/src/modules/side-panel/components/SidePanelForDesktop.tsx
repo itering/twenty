@@ -1,5 +1,4 @@
-import { tableWidthResizeIsActiveState } from '@/object-record/record-table/states/tableWidthResizeIsActivedState';
-import { SidePanelAskAiHandoffEffect } from '@/side-panel/components/SidePanelAskAiHandoffEffect';
+import { isResizablePanelDraggingState } from '@/ui/layout/resizable-panel/states/isResizablePanelDraggingState';
 import { SidePanelRouter } from '@/side-panel/components/SidePanelRouter';
 import { SidePanelWidthEffect } from '@/side-panel/components/SidePanelWidthEffect';
 import { SIDE_PANEL_CLICK_OUTSIDE_ID } from '@/side-panel/constants/SidePanelClickOutsideId';
@@ -12,8 +11,10 @@ import {
   SIDE_PANEL_WIDTH_VAR,
   sidePanelWidthState,
 } from '@/side-panel/states/sidePanelWidthState';
-import { ModalContainerContext } from '@/ui/layout/modal/contexts/ModalContainerContext';
-import { ResizablePanelGap } from '@/ui/layout/resizable-panel/components/ResizablePanelGap';
+import { DialogContainerContext } from '@/ui/layout/dialog/contexts/DialogContainerContext';
+import { ResizeHandle } from 'twenty-ui/primitives/layout';
+import { useLingui } from '@lingui/react/macro';
+import { getUiZoom } from '@/ui/theme/utils/getUiZoom';
 import { ParentClickOutsideIdContext } from '@/ui/utilities/pointer-event/contexts/ParentClickOutsideIdContext';
 import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
@@ -22,7 +23,8 @@ import { styled } from '@linaria/react';
 import { useReducedMotion } from 'framer-motion';
 import { useStore } from 'jotai';
 import { type AnimationEvent, useCallback, useState } from 'react';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { isSidePanelShrinkingFromFullWidthState } from '@/side-panel/states/isSidePanelShrinkingFromFullWidthState';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 const StyledSidePanelWrapper = styled.div<{
   isOpen: boolean;
@@ -73,6 +75,7 @@ const StyledModalContainer = styled.div`
 `;
 
 export const SidePanelForDesktop = () => {
+  const { t } = useLingui();
   const store = useStore();
   const isSidePanelOpened = useAtomStateValue(isSidePanelOpenedState);
   const [sidePanelWidth, setSidePanelWidth] = useAtomState(sidePanelWidthState);
@@ -85,21 +88,18 @@ export const SidePanelForDesktop = () => {
     null,
   );
   const [isResizing, setIsResizing] = useState(false);
+  const [liveWidth, setLiveWidth] = useState<number | null>(null);
   const [shouldRenderContent, setShouldRenderContent] =
     useState(isSidePanelOpened);
-  const [isShrinkingFromFullWidth, setIsShrinkingFromFullWidth] =
-    useState(false);
+  const [
+    isSidePanelShrinkingFromFullWidth,
+    setIsSidePanelShrinkingFromFullWidth,
+  ] = useAtomState(isSidePanelShrinkingFromFullWidthState);
+  const isShrinkingFromFullWidth =
+    isSidePanelShrinkingFromFullWidth && shouldReduceMotion !== true;
 
-  const handleContinueChatFromFullWidth = useCallback(() => {
-    if (shouldReduceMotion === true) {
-      return;
-    }
-
-    setIsShrinkingFromFullWidth(true);
-  }, [shouldReduceMotion]);
-
-  const setTableWidthResizeIsActive = useSetAtomState(
-    tableWidthResizeIsActiveState,
+  const setIsResizablePanelDragging = useSetAtomState(
+    isResizablePanelDraggingState,
   );
 
   const shouldShowContent = isSidePanelOpened || shouldRenderContent;
@@ -125,7 +125,7 @@ export const SidePanelForDesktop = () => {
       return;
     }
 
-    setIsShrinkingFromFullWidth(false);
+    setIsSidePanelShrinkingFromFullWidth(false);
     handleTransitionEnd();
   };
 
@@ -139,39 +139,58 @@ export const SidePanelForDesktop = () => {
   const handleWidthChange = useCallback(
     (width: number) => {
       setSidePanelWidth(width);
+      setLiveWidth(null);
       setIsResizing(false);
-      setTableWidthResizeIsActive(true);
+      setIsResizablePanelDragging(false);
     },
-    [setSidePanelWidth, setTableWidthResizeIsActive],
+    [setSidePanelWidth, setIsResizablePanelDragging],
   );
+
+  const handleWidthPreview = (width: number) => {
+    setLiveWidth(width);
+    document.documentElement.style.setProperty(
+      SIDE_PANEL_WIDTH_VAR,
+      `${width}px`,
+    );
+  };
+
+  const handleResizeEnd = () => {
+    setLiveWidth(null);
+    setIsResizing(false);
+    setIsResizablePanelDragging(false);
+  };
 
   const handleResizeStart = useCallback(() => {
     setIsResizing(true);
-    setTableWidthResizeIsActive(false);
-  }, [setTableWidthResizeIsActive]);
+    setIsResizablePanelDragging(true);
+  }, [setIsResizablePanelDragging]);
 
   const handleCollapse = useCallback(() => {
     closeSidePanelMenu();
+    setLiveWidth(null);
     setIsResizing(false);
-    setTableWidthResizeIsActive(true);
-  }, [closeSidePanelMenu, setTableWidthResizeIsActive]);
+    setIsResizablePanelDragging(false);
+  }, [closeSidePanelMenu, setIsResizablePanelDragging]);
 
   return (
     <>
       <SidePanelWidthEffect />
-      <SidePanelAskAiHandoffEffect
-        onContinueChatFromFullWidth={handleContinueChatFromFullWidth}
-      />
-      <ResizablePanelGap
-        side="left"
-        constraints={SIDE_PANEL_CONSTRAINTS}
-        currentWidth={sidePanelWidth}
-        onWidthChange={handleWidthChange}
-        onCollapse={handleCollapse}
-        gapWidth={0}
-        cssVariableName={SIDE_PANEL_WIDTH_VAR}
-        onResizeStart={handleResizeStart}
-      />
+      {isSidePanelOpened && (
+        <ResizeHandle
+          edge="left"
+          min={SIDE_PANEL_CONSTRAINTS.min}
+          max={SIDE_PANEL_CONSTRAINTS.max}
+          value={liveWidth ?? sidePanelWidth}
+          onValueChange={handleWidthPreview}
+          onValueCommitted={handleWidthChange}
+          onActivate={handleCollapse}
+          placement="gap"
+          aria-label={t`Resize side panel`}
+          scale={getUiZoom}
+          onResizeEnd={handleResizeEnd}
+          onResizeStart={handleResizeStart}
+        />
+      )}
 
       <StyledSidePanelWrapper
         isOpen={isSidePanelOpened}
@@ -184,13 +203,15 @@ export const SidePanelForDesktop = () => {
       >
         <StyledSidePanel isShrinkingFromFullWidth={isShrinkingFromFullWidth}>
           <StyledModalContainer ref={handleModalContainerRef} />
-          <ModalContainerContext.Provider value={{ container: modalContainer }}>
+          <DialogContainerContext.Provider
+            value={{ container: modalContainer }}
+          >
             <ParentClickOutsideIdContext.Provider
               value={SIDE_PANEL_CLICK_OUTSIDE_ID}
             >
               {shouldShowContent && <SidePanelRouter />}
             </ParentClickOutsideIdContext.Provider>
-          </ModalContainerContext.Provider>
+          </DialogContainerContext.Provider>
         </StyledSidePanel>
       </StyledSidePanelWrapper>
     </>

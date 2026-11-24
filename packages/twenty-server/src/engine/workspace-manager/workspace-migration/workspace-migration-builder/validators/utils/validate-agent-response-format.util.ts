@@ -3,10 +3,7 @@ import { isValidAgentResponseSchemaPropertyKey } from 'twenty-shared/ai';
 import { isDefined, isNonEmptyArray } from 'twenty-shared/utils';
 
 import { AiExceptionCode } from 'src/engine/metadata-modules/ai/ai.exception';
-import {
-  type AgentJsonResponseFormat,
-  type AgentResponseFormat,
-} from 'src/engine/metadata-modules/ai/ai-agent/types/agent-response-format.type';
+import { type AgentResponseFormat } from 'src/engine/metadata-modules/ai/ai-agent/types/agent-response-format.type';
 import { type FlatEntityValidationError } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/builders/types/failed-flat-entity-validation.type';
 
 export const validateAgentResponseFormat = ({
@@ -33,6 +30,18 @@ export const validateAgentResponseFormat = ({
     });
   }
 
+  if (
+    type === 'json' &&
+    isDefined(responseFormat.schema) &&
+    !isDefined(responseFormat.schema.properties)
+  ) {
+    errors.push({
+      code: AiExceptionCode.INVALID_AGENT_INPUT,
+      message: t`Response format with type "json" must include output fields`,
+      userFriendlyMessage: msg`Add at least one output field to the JSON response format`,
+    });
+  }
+
   if (type === 'json' && isDefined(responseFormat.schema)) {
     const invalidPropertyNames = Object.keys(
       responseFormat.schema.properties ?? {},
@@ -51,7 +60,8 @@ export const validateAgentResponseFormat = ({
 
   if (
     type === 'text' &&
-    isDefined((responseFormat as unknown as AgentJsonResponseFormat).schema)
+    'schema' in responseFormat &&
+    isDefined(responseFormat.schema)
   ) {
     errors.push({
       code: AiExceptionCode.INVALID_AGENT_INPUT,

@@ -1,15 +1,10 @@
 import { type EmailRecipient } from '@/activities/emails/recipients/types/EmailRecipient';
+import { type EmailRecipientsByFieldId } from '@/activities/emails/recipients/types/EmailRecipientsByFieldId';
 import { type EmailRecipientsFieldId } from '@/activities/emails/recipients/types/EmailRecipientsFieldId';
 import { mergeEmailRecipients } from '@/activities/emails/recipients/utils/mergeEmailRecipients';
 import { toSpliced } from '~/utils/array/toSpliced';
 
-export type EmailRecipientsByFieldId = Record<
-  EmailRecipientsFieldId,
-  EmailRecipient[]
->;
-
-// Both lists are built from the same recipient objects, so identity comparison
-// is enough to tell a real reorder from a drop that landed back in place.
+// Both lists share recipient objects, so identity comparison is enough.
 const areRecipientListsEqual = (
   recipients: EmailRecipient[],
   otherRecipients: EmailRecipient[],
@@ -51,17 +46,14 @@ export const moveEmailRecipientsBetweenFields = ({
   );
 
   if (sourceFieldId === destinationFieldId) {
-    // Removing the dragged chips first shifts every later slot left, so the
-    // drop index has to lose the chips that used to sit before it.
+    // Removing the dragged chips first shifts every later slot left.
     const removedBeforeDestinationCount = sortedMovedIndices.filter(
       (index) => index < destinationIndex,
     ).length;
     const adjustedDestinationIndex =
       destinationIndex - removedBeforeDestinationCount;
 
-    // Spliced back in directly rather than merged: a field seeded from a draft
-    // can already hold the same address twice, and a reorder must never change
-    // the recipient count.
+    // Spliced, not merged: a draft can hold the same address twice, and a reorder must keep the count.
     const reorderedRecipients = toSpliced(
       remainingSourceRecipients,
       adjustedDestinationIndex,

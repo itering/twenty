@@ -1,46 +1,68 @@
-import { MAIN_CONTEXT_STORE_INSTANCE_ID } from '@/context-store/constants/MainContextStoreInstanceId';
+import { useContextStoreInstanceId } from '@/context-store/hooks/useContextStoreInstanceId';
 import { contextStoreCurrentViewIdComponentState } from '@/context-store/states/contextStoreCurrentViewIdComponentState';
 
 import { useRecordIndexContextOrThrow } from '@/object-record/record-index/contexts/RecordIndexContext';
 import { useLoadRecordIndexStates } from '@/object-record/record-index/hooks/useLoadRecordIndexStates';
 import { recordIndexViewTypeState } from '@/object-record/record-index/states/recordIndexViewTypeState';
-import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
 import { useUpdateCurrentView } from '@/views/hooks/useUpdateCurrentView';
 import { viewsSelector } from '@/views/states/selectors/viewsSelector';
 import { type GraphQLView } from '@/views/types/GraphQLView';
-import { ViewType, viewTypeIconMapping } from '@/views/types/ViewType';
+import { type ViewWithRelations } from '@/views/types/ViewWithRelations';
+import { ViewType, viewTypeIconKeyMapping } from '@/views/types/ViewType';
+import { resolveMainGroupByFieldMetadataId } from '@/views/utils/resolveMainGroupByFieldMetadataId';
 import { useGetAvailableFieldsForCalendar } from '@/views/view-picker/hooks/useGetAvailableFieldsForCalendar';
 import { useGetAvailableFieldsToGroupRecordsBy } from '@/views/view-picker/hooks/useGetAvailableFieldsToGroupRecordsBy';
 import { useStore } from 'jotai';
 import { useCallback } from 'react';
-import { assertUnreachable, isDefined } from 'twenty-shared/utils';
+import { assertUnreachable, findById, isDefined } from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
 import { ViewCalendarLayout } from '~/generated-metadata/graphql';
 
 export const useSetViewTypeFromLayoutOptionsMenu = () => {
   const { updateCurrentView } = useUpdateCurrentView();
-  const setRecordIndexViewType = useSetAtomState(recordIndexViewTypeState);
+  const setRecordIndexViewType = useSetAtomComponentState(
+    recordIndexViewTypeState,
+  );
   const { availableFieldsForGrouping } =
     useGetAvailableFieldsToGroupRecordsBy();
   const { objectMetadataItem } = useRecordIndexContextOrThrow();
 
-  const { loadRecordIndexStates } = useLoadRecordIndexStates();
+  const { loadRecordIndexStates, syncRecordIndexViewFields } =
+    useLoadRecordIndexStates();
 
   const { availableFieldsForCalendar } = useGetAvailableFieldsForCalendar();
 
+  const contextStoreInstanceId = useContextStoreInstanceId();
+
   const store = useStore();
+
+  // Nothing else reloads the type-dependent fields here; the latest view keeps columns changed meanwhile
+  const syncViewFieldsForViewType = useCallback(
+    ({ view, viewType }: { view: ViewWithRelations; viewType: ViewType }) => {
+      const latestView =
+        store.get(viewsSelector.atom).find(findById(view.id)) ?? view;
+
+      syncRecordIndexViewFields(
+        { ...latestView, type: viewType },
+        objectMetadataItem,
+      );
+    },
+    [store, syncRecordIndexViewFields, objectMetadataItem],
+  );
 
   const setAndPersistViewType = useCallback(
     async (viewType: ViewType) => {
       const currentViewId = store.get(
         contextStoreCurrentViewIdComponentState.atomFamily({
-          instanceId: MAIN_CONTEXT_STORE_INSTANCE_ID,
+          instanceId: contextStoreInstanceId,
         }),
       );
 
       const existingViews = store.get(viewsSelector.atom);
 
       if (!isDefined(currentViewId)) {
-        throw new Error('No view id found');
+        throw new Error(doNotTranslate('No view id found'));
       }
 
       const currentView = existingViews.find(
@@ -48,7 +70,7 @@ export const useSetViewTypeFromLayoutOptionsMenu = () => {
       );
 
       if (!isDefined(currentView)) {
-        throw new Error('No current view found');
+        throw new Error(doNotTranslate('No current view found'));
       }
 
       const updateCurrentViewParams: Partial<GraphQLView> = {};
@@ -56,37 +78,44 @@ export const useSetViewTypeFromLayoutOptionsMenu = () => {
 
       switch (viewType) {
         case ViewType.KANBAN: {
-          if (availableFieldsForGrouping.length === 0) {
-            throw new Error('No fields for kanban - should not happen');
+          const mainGroupByFieldMetadataId = resolveMainGroupByFieldMetadataId({
+            availableFieldsForGrouping,
+            currentMainGroupByFieldMetadataId:
+              currentView.mainGroupByFieldMetadataId,
+          });
+
+          if (!isDefined(mainGroupByFieldMetadataId)) {
+            throw new Error(
+              doNotTranslate('No fields for kanban - should not happen'),
+            );
           }
 
-          const mainGroupByFieldMetadataId = availableFieldsForGrouping[0].id;
           updateCurrentViewParams.mainGroupByFieldMetadataId =
             mainGroupByFieldMetadataId;
 
           if (shouldChangeIcon(currentView.icon, currentView.type)) {
-            updateCurrentViewParams.icon =
-              viewTypeIconMapping(viewType).displayName;
+            updateCurrentViewParams.icon = viewTypeIconKeyMapping(viewType);
           }
 
           setRecordIndexViewType(viewType);
           await updateCurrentView(updateCurrentViewParams);
+          syncViewFieldsForViewType({ view: currentView, viewType });
           return;
         }
         case ViewType.TABLE:
         case ViewType.LIST: {
           if (shouldChangeIcon(currentView.icon, currentView.type)) {
-            updateCurrentViewParams.icon =
-              viewTypeIconMapping(viewType).displayName;
+            updateCurrentViewParams.icon = viewTypeIconKeyMapping(viewType);
           }
           updateCurrentViewParams.mainGroupByFieldMetadataId = null;
           await updateCurrentView(updateCurrentViewParams);
           setRecordIndexViewType(viewType);
+          syncViewFieldsForViewType({ view: currentView, viewType });
           return;
         }
         case ViewType.CALENDAR: {
           if (availableFieldsForCalendar.length === 0) {
-            throw new Error('No date fields for calendar');
+            throw new Error(doNotTranslate('No date fields for calendar'));
           }
 
           const calendarFieldMetadataId = availableFieldsForCalendar[0].id;
@@ -105,8 +134,7 @@ export const useSetViewTypeFromLayoutOptionsMenu = () => {
           );
 
           if (shouldChangeIcon(currentView.icon, currentView.type)) {
-            updateCurrentViewParams.icon =
-              viewTypeIconMapping(viewType).displayName;
+            updateCurrentViewParams.icon = viewTypeIconKeyMapping(viewType);
           }
           updateCurrentViewParams.calendarLayout = ViewCalendarLayout.MONTH;
           updateCurrentViewParams.calendarFieldMetadataId =
@@ -134,7 +162,9 @@ export const useSetViewTypeFromLayoutOptionsMenu = () => {
       updateCurrentView,
       availableFieldsForCalendar,
       loadRecordIndexStates,
+      syncViewFieldsForViewType,
       objectMetadataItem,
+      contextStoreInstanceId,
     ],
   );
 
@@ -144,25 +174,25 @@ export const useSetViewTypeFromLayoutOptionsMenu = () => {
   ): boolean => {
     if (
       oldViewType === ViewType.KANBAN &&
-      oldIcon === viewTypeIconMapping(ViewType.KANBAN).displayName
+      oldIcon === viewTypeIconKeyMapping(ViewType.KANBAN)
     ) {
       return true;
     }
     if (
       oldViewType === ViewType.TABLE &&
-      oldIcon === viewTypeIconMapping(ViewType.TABLE).displayName
+      oldIcon === viewTypeIconKeyMapping(ViewType.TABLE)
     ) {
       return true;
     }
     if (
       oldViewType === ViewType.CALENDAR &&
-      oldIcon === viewTypeIconMapping(ViewType.CALENDAR).displayName
+      oldIcon === viewTypeIconKeyMapping(ViewType.CALENDAR)
     ) {
       return true;
     }
     if (
       oldViewType === ViewType.LIST &&
-      oldIcon === viewTypeIconMapping(ViewType.LIST).displayName
+      oldIcon === viewTypeIconKeyMapping(ViewType.LIST)
     ) {
       return true;
     }

@@ -6,12 +6,16 @@ export const AUTHORIZE_APP = gql`
     $codeChallenge: String
     $redirectUrl: String!
     $state: String
+    $issuer: String
+    $resource: String
   ) {
     authorizeApp(
       clientId: $clientId
       codeChallenge: $codeChallenge
       redirectUrl: $redirectUrl
       state: $state
+      issuer: $issuer
+      resource: $resource
     ) {
       redirectUrl
     }

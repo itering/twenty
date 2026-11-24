@@ -1,6 +1,6 @@
 # Itering CRM
 
-Maintained from [Twenty `twenty/v2.30.0`](https://github.com/twentyhq/twenty/tree/531361c9a73b5eda6223fc8deae7d5b3fe144fec).
+Maintained from [Twenty `twenty/v2.62.0`](https://github.com/twentyhq/twenty/tree/548ecf1376ab3424abdb178daa4c6590867298ce).
 
 Itering modification, 2026-09-15: the workspace creation limit defaults to **999** per shared database and can be set with the environment-only `MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY` variable. Use a positive integer and restart all server and worker processes after changing it. Invalid values fail configuration validation. Enterprise license verification and other feature gates remain unchanged. This limit is not a tested capacity guarantee.
 
@@ -19,7 +19,7 @@ The original [LICENSE](LICENSE) remains in effect, including its commercial-file
 Build locally:
 
 ```sh
-docker build --target twenty --build-arg APP_VERSION=2.30.0 -f packages/twenty-docker/twenty/Dockerfile -t itering-twenty:local .
+docker build --target twenty --build-arg APP_VERSION=2.62.0 -f packages/twenty-docker/twenty/Dockerfile -t itering-twenty:local .
 ```
 
 For upgrades, review upstream changes and licenses, update the baseline, and run database upgrade validation before deployment. Database migration and cron registration remain deployment responsibilities; CI does not access any running CRM database.
@@ -67,7 +67,10 @@ The fastest way to get started. Sign up at [twenty.com](https://twenty.com) and 
 Scaffold a new app with the Twenty CLI:
 
 ```bash
-npx create-twenty-app my-app
+npm install -g twenty
+twenty app init my-app
+cd my-app
+yarn install
 ```
 
 Define objects, fields, and views as code:
@@ -91,10 +94,19 @@ export default defineObject({
 Then ship it to your workspace:
 
 ```bash
-npx twenty app:publish --private
+twenty auth login --url https://your-workspace.twenty.com
+twenty app publish --private
 ```
 
 See the [app development guide](https://docs.twenty.com/developers/extend/apps/getting-started) for objects, views, agents, and logic functions.
+
+Building with a coding agent? Install the official [Twenty app skills](./packages/twenty-agent-skills), which work in Claude Code, Codex, Cursor, Pi, and any other harness supported by the `skills` CLI:
+
+```bash
+npx skills add https://github.com/twentyhq/twenty/tree/agent-skills --list
+```
+
+The `agent-skills` branch is created by the first successful publish from `main`. Until then, use the [local build instructions](./packages/twenty-agent-skills#local-development). [`SKILLS.md`](./SKILLS.md) explains the other skill families in this repository and who they are for.
 
 ### <img src="./packages/twenty-website/public/images/readme/rocket-icon.svg" width="14" height="14"/> Self-hosting
 

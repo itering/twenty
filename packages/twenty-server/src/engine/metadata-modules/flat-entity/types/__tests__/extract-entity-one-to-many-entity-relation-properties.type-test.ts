@@ -32,10 +32,13 @@ type Assertions = [
       | 'mainGroupByFieldMetadataViews'
       | 'viewSorts'
       | 'searchFieldMetadatas'
+      | 'fieldMetadataOptions'
+      | 'rowLevelPermissionPredicates'
+      | 'relationRowLevelPermissionPredicates'
+      | 'workspaceMemberRowLevelPermissionPredicates'
     >
   >,
 
-  // When filtered by SyncableEntity target, only syncable relations are included
   Expect<
     Equal<
       FieldMetadataOneToManySyncableRelations,
@@ -48,6 +51,10 @@ type Assertions = [
       | 'mainGroupByFieldMetadataViews'
       | 'viewSorts'
       | 'searchFieldMetadatas'
+      | 'fieldMetadataOptions'
+      | 'rowLevelPermissionPredicates'
+      | 'relationRowLevelPermissionPredicates'
+      | 'workspaceMemberRowLevelPermissionPredicates'
     >
   >,
 ];

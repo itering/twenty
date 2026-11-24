@@ -35,9 +35,9 @@ import {
   type Point,
   type SliceTooltipProps,
 } from '@nivo/line';
-import { useCallback, useContext, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
-import { ThemeContext } from 'twenty-ui/theme-constants';
+import { useTheme } from 'twenty-ui/theme';
 import { useDebouncedCallback } from 'use-debounce';
 
 type CrosshairLayerProps = LineCustomSvgLayerProps<LineSeries>;
@@ -50,6 +50,7 @@ type GraphWidgetLineChartProps = {
   axisDisplayType?: GraphValueFormatOptions['displayType'];
   data: LineChartSeriesWithColor[];
   showLegend?: boolean;
+  isLegendInteractive?: boolean;
   showGrid?: boolean;
   enablePointLabel?: boolean;
   xAxisLabel?: string;
@@ -77,6 +78,7 @@ const StyledContainer = styled.div`
 export const GraphWidgetLineChart = ({
   data,
   showLegend = true,
+  isLegendInteractive = true,
   showGrid = true,
   enableArea = true,
   enablePointLabel = false,
@@ -97,7 +99,7 @@ export const GraphWidgetLineChart = ({
   customFormatter,
   onSliceClick,
 }: GraphWidgetLineChartProps) => {
-  const { theme } = useContext(ThemeContext);
+  const theme = useTheme();
   const colorRegistry = createGraphColorRegistry(theme.color);
   const chartTheme = useLineChartTheme();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -367,7 +369,11 @@ export const GraphWidgetLineChart = ({
         onMouseLeave={handleTooltipMouseLeave}
       />
       {showLegend && data.length > 0 && (
-        <GraphWidgetLegend show items={legendItems} />
+        <GraphWidgetLegend
+          items={legendItems}
+          show
+          isInteractive={isLegendInteractive}
+        />
       )}
     </StyledContainer>
   );

@@ -1,0 +1,44 @@
+import type * as esbuild from 'esbuild';
+import {
+  createJsxRuntimeRemoteWrapperPlugin,
+  createSharedDependenciesShimPlugin,
+  type SharedDependenciesBuildContext,
+} from 'twenty-shared/front-component-build';
+import { isDefined } from 'twenty-shared/utils';
+
+import { createAppCssInjectionPlugin } from '@/app/bundles/front-component-build/css-injection-plugin';
+import { jsxTransformToRemoteDomWorkerFormatPlugin } from '../jsx-transform-to-remote-dom-worker-format-plugin';
+import { createPreactAliasPlugin } from '../preact-alias-plugin';
+
+type GetFrontComponentBuildPluginsOptions = {
+  usePreact?: boolean;
+  onSourceFiles?: ({
+    paths,
+    entryPath,
+  }: {
+    paths: string[];
+    entryPath: string;
+  }) => void;
+  getSharedDependenciesBuildContext?: () => SharedDependenciesBuildContext | null;
+};
+
+export const getFrontComponentBuildPlugins = (
+  options?: GetFrontComponentBuildPluginsOptions,
+): esbuild.Plugin[] => [
+  ...(isDefined(options?.getSharedDependenciesBuildContext)
+    ? [
+        createSharedDependenciesShimPlugin({
+          getSharedDependenciesBuildContext:
+            options.getSharedDependenciesBuildContext,
+        }),
+      ]
+    : []),
+  createJsxRuntimeRemoteWrapperPlugin(
+    options?.usePreact ? { usePreact: true } : undefined,
+  ),
+  ...(options?.usePreact ? [createPreactAliasPlugin()] : []),
+  jsxTransformToRemoteDomWorkerFormatPlugin,
+  createAppCssInjectionPlugin({
+    onSourceFiles: options?.onSourceFiles,
+  }),
+];

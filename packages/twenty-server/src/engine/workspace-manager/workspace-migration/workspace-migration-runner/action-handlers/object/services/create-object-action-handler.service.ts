@@ -5,17 +5,19 @@ import { v4 } from 'uuid';
 
 import { WorkspaceMigrationRunnerActionHandler } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-runner/interfaces/workspace-migration-runner-action-handler-service.interface';
 
+import { enrichRecordTableSchemaWithIsPrivate } from 'src/engine/permissions/private-record/utils/enrich-record-table-schema-with-is-private.util';
+import { enrichAccessGroupTableSchema } from 'src/engine/permissions/access-group/utils/enrich-access-group-table-schema.util';
+import { enrichRecordTableSchemaWithAccessGroupIds } from 'src/engine/permissions/access-group/utils/enrich-record-table-schema-with-access-group-ids.util';
 import { ALL_METADATA_ENTITY_BY_METADATA_NAME } from 'src/engine/metadata-modules/flat-entity/constant/all-metadata-entity-by-metadata-name.constant';
 import { isCompositeFlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/is-composite-flat-field-metadata.util';
 import { isEnumFlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/is-enum-flat-field-metadata.util';
 import { isFlatFieldMetadataOfType } from 'src/engine/metadata-modules/flat-field-metadata/utils/is-flat-field-metadata-of-type.util';
-import { deriveSearchVectorAsExpressionForTsVectorField } from 'src/engine/metadata-modules/flat-search-field-metadata/utils/derive-search-vector-as-expression-for-ts-vector-field.util';
-import { getTargetSearchFieldMetadatasForTsVectorField } from 'src/engine/metadata-modules/flat-search-field-metadata/utils/get-target-search-field-metadatas-for-ts-vector-field.util';
+import { resolveSearchVectorAsExpressionForTsVectorField } from 'src/engine/metadata-modules/flat-search-field-metadata/utils/resolve-search-vector-as-expression-for-ts-vector-field.util';
 import { WorkspaceSchemaManagerService } from 'src/engine/twenty-orm/workspace-schema-manager/workspace-schema-manager.service';
 import {
   FlatCreateObjectAction,
   UniversalCreateObjectAction,
-} from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/builders/object/types/workspace-migration-object-action';
+} from 'src/engine/workspace-manager/workspace-migration/workspace-migration-builder/builders/object/types/workspace-migration-object-action.type';
 import { fromUniversalFlatFieldMetadataToFlatFieldMetadata } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-runner/action-handlers/field/services/utils/from-universal-flat-field-metadata-to-flat-field-metadata.util';
 import { fromUniversalFlatObjectMetadataToFlatObjectMetadata } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-runner/action-handlers/object/services/utils/from-universal-flat-object-metadata-to-flat-object-metadata.util';
 import {
@@ -23,6 +25,7 @@ import {
   WorkspaceMigrationActionRunnerContext,
 } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-runner/types/workspace-migration-action-runner-args.type';
 import { flatEntityToScalarFlatEntity } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-runner/utils/flat-entity-to-scalar-flat-entity.util';
+import { applyFieldMetadataOptionRowsToCreatedFlatFieldMetadata } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-runner/utils/apply-field-metadata-option-rows-to-created-flat-field-metadata.util';
 import { generateColumnDefinitions } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-runner/utils/generate-column-definitions.util';
 import { getWorkspaceSchemaContextForMigration } from 'src/engine/workspace-manager/workspace-migration/workspace-migration-runner/utils/get-workspace-schema-context-for-migration.util';
 import {
@@ -128,19 +131,20 @@ export class CreateObjectActionHandlerService extends WorkspaceMigrationRunnerAc
       allFlatEntityMaps,
       getSearchFieldMetadatasByTsVectorFieldId,
     } = context;
-    const { flatEntity: flatObjectMetadata, flatFieldMetadatas } = flatAction;
+    const { flatEntity: flatObjectMetadata } = flatAction;
+    const flatFieldMetadatas = flatAction.flatFieldMetadatas.map(
+      (flatFieldMetadata) =>
+        applyFieldMetadataOptionRowsToCreatedFlatFieldMetadata({
+          flatFieldMetadata,
+          fieldMetadataOptionEnumChanges:
+            context.fieldMetadataOptionEnumChanges,
+        }),
+    );
 
     const { schemaName, tableName } = getWorkspaceSchemaContextForMigration({
       workspaceId,
       objectMetadata: flatObjectMetadata,
     });
-
-    const indexedFieldById = new Map(
-      flatFieldMetadatas.map((flatFieldMetadata) => [
-        flatFieldMetadata.id,
-        { name: flatFieldMetadata.name, type: flatFieldMetadata.type },
-      ]),
-    );
 
     const columnDefinitions = flatFieldMetadatas.flatMap((flatFieldMetadata) =>
       generateColumnDefinitions({
@@ -151,17 +155,12 @@ export class CreateObjectActionHandlerService extends WorkspaceMigrationRunnerAc
           flatFieldMetadata,
           FieldMetadataType.TS_VECTOR,
         )
-          ? deriveSearchVectorAsExpressionForTsVectorField({
-              targetSearchFieldMetadatas:
-                getSearchFieldMetadatasByTsVectorFieldId?.(
-                  flatFieldMetadata.id,
-                ) ??
-                getTargetSearchFieldMetadatasForTsVectorField({
-                  tsVectorFieldMetadataId: flatFieldMetadata.id,
-                  flatSearchFieldMetadataMaps:
-                    allFlatEntityMaps.flatSearchFieldMetadataMaps,
-                }),
-              indexedFieldById,
+          ? resolveSearchVectorAsExpressionForTsVectorField({
+              tsVectorFieldMetadataId: flatFieldMetadata.id,
+              objectFlatFieldMetadatas: flatFieldMetadatas,
+              flatSearchFieldMetadataMaps:
+                allFlatEntityMaps.flatSearchFieldMetadataMaps,
+              getSearchFieldMetadatasByTsVectorFieldId,
             })
           : undefined,
       }),
@@ -186,11 +185,31 @@ export class CreateObjectActionHandlerService extends WorkspaceMigrationRunnerAc
       workspaceSchemaManagerService: this.workspaceSchemaManagerService,
     });
 
+    const tableSchema = enrichRecordTableSchemaWithIsPrivate({
+      objectMetadata: flatObjectMetadata,
+      tableSchema: enrichRecordTableSchemaWithAccessGroupIds({
+        objectMetadata: flatObjectMetadata,
+        tableSchema: enrichAccessGroupTableSchema({
+          objectMetadata: flatObjectMetadata,
+          tableSchema: { columnDefinitions, indexDefinitions: [] },
+        }),
+      }),
+    });
+
     await this.workspaceSchemaManagerService.tableManager.createTable({
       queryRunner,
       schemaName,
       tableName,
-      columnDefinitions,
+      columnDefinitions: tableSchema.columnDefinitions,
     });
+
+    for (const index of tableSchema.indexDefinitions) {
+      await this.workspaceSchemaManagerService.indexManager.createIndex({
+        queryRunner,
+        schemaName,
+        tableName,
+        index,
+      });
+    }
   }
 }

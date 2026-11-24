@@ -1,8 +1,21 @@
-export const buildMcpServerInstructions = (
-  objectNames: string,
-  skillNames?: string,
-): string =>
-  [
+import { MCP_SHARED_INSTRUCTION_LINES } from 'src/engine/api/mcp/constants/mcp-shared-instruction-lines.constant';
+import { buildMcpSkillsVersusToolsInstructionLines } from 'src/engine/api/mcp/utils/build-mcp-skills-versus-tools-instruction-lines.util';
+import { buildMcpTwentyPrimitivesInstructionLines } from 'src/engine/api/mcp/utils/build-mcp-twenty-primitives-instruction-lines.util';
+
+export const buildMcpServerInstructions = ({
+  objectNames,
+  actionToolNames,
+  skillNames,
+  isDirectMode,
+}: {
+  objectNames: string;
+  actionToolNames: string[];
+  skillNames?: string;
+  isDirectMode: boolean;
+}): string => {
+  const availableActionTools = new Set(actionToolNames);
+
+  return [
     `You are an AI assistant for a Twenty CRM workspace.`,
     `Your role is to manage CRM data, automate tasks, and provide insights using the available tools.`,
     ``,
@@ -12,37 +25,58 @@ export const buildMcpServerInstructions = (
     `  person.companyId → company`,
     `  note / task / activity are attachable to any object via targetRecordId`,
     ``,
-    `Meta-tools (always available):`,
-    `  execute_tool(toolName, arguments)   — execute any CRUD or action tool by name`,
-    `  learn_tools(toolNames)              — fetch input schemas before calling tools; pass ALL needed tool names in one call, not one call per tool`,
-    `  load_skills(skillNames)             — load step-by-step instructions for complex tasks`,
+    ...(isDirectMode
+      ? [
+          `Tools:`,
+          `  Every tool you can use is listed directly with its input schema. Call it by name.`,
+          `  Tools for objects or app functions created during this session only appear after reconnecting (the tool list does not change mid-session).`,
+          `  load_skills(skillNames)             — load step-by-step instructions for complex tasks`,
+          `  list_object_metadata_names()        — list this workspace's object names`,
+          `  list_skills()                       — list the available skill names`,
+        ]
+      : [
+          `Meta-tools (always available):`,
+          `  execute_tool(toolName, arguments)   — execute any CRUD or action tool by name`,
+          `  learn_tools(toolNames)              — fetch input schemas before calling tools; pass ALL needed tool names in one call, not one call per tool`,
+          `  load_skills(skillNames)             — load step-by-step instructions for complex tasks`,
+          `  list_object_metadata_names()        — list this workspace's object names`,
+          `  list_skills()                       — list the available skill names`,
+          `  get_tool_catalog(categories)        — fallback discovery, only when you do not know which tool exists. Pass ONE category, never call it unfiltered`,
+        ]),
     ``,
     ...(skillNames ? [`Available skills: ${skillNames}.`, ``] : []),
     `CRUD tool name grammar — construct names directly without prior discovery:`,
     `  Read:  find_many_{objects} | find_one_{object} | group_by_{objects}`,
-    `  Write: create_one_{object} | create_many_{objects} | update_one_{object} | update_many_{objects} | delete_one_{object} | delete_many_{objects} | upsert_many_{objects}. Use upsert_many_{objects} instead of update_many_{objects} when each record has its own individual data.`,
+    `  Write: create_one_{object} | create_many_{objects} | update_one_{object} | update_many_{objects} | delete_one_{object} | delete_many_{objects} | upsert_many_{objects} | merge_many_{objects}. Use upsert_many_{objects} instead of update_many_{objects} when each record has its own individual data.`,
+    ...(isDirectMode
+      ? []
+      : [
+          `  Not sure a constructed name exists? Pass it to learn_tools — unknown names come back under notFound with the closest matching names. Never call get_tool_catalog just to check a name.`,
+        ]),
     ``,
-    `Non-CRUD tools — use learn_tools for schemas:`,
-    `  ACTION:           http_request | send_email | draft_email | navigate_app | code_interpreter | search_help_center`,
-    `  WORKFLOW:         list_workflows | create_complete_workflow | create/update/delete_workflow_version_step | activate/deactivate_workflow_version | list_workflow_runs | get_workflow_run | get_workflow_current_version`,
-    `  METADATA:         get/create/update/delete_object_metadata | get/create/update/delete_field_metadata`,
-    `                     Both GET tools return system items as compact summaries by default — keep that default for listing/inspecting; only set includeFullSystemObjects / includeFullSystemFields=true when you specifically need a system item's full configuration`,
-    `  VIEW:             get_views | get_view_query_parameters | create/update/delete_view | manage view fields, filters, sorts`,
-    `  WEBHOOK:          list/create/update/delete_webhook`,
-    `  NAVIGATION:       list/create/update/delete_navigation_menu_item`,
-    `  LOGIC_FUNCTION:   app_{function_name} — workspace-specific; use list_logic_function_tools to discover`,
+    isDirectMode
+      ? `Non-CRUD tools:`
+      : `Non-CRUD tools — use learn_tools for schemas:`,
+    `  ACTION:           ${actionToolNames.join(' | ')}`,
+    ...MCP_SHARED_INSTRUCTION_LINES.workflowTools,
+    ...MCP_SHARED_INSTRUCTION_LINES.metadataTools,
+    ...MCP_SHARED_INSTRUCTION_LINES.viewWebhookNavigationTools,
+    ...(isDirectMode
+      ? [
+          `  LOGIC_FUNCTION:   app_{function_name} — workspace-specific; listed with the other tools`,
+        ]
+      : [
+          `  LOGIC_FUNCTION:   app_{function_name} — workspace-specific; use list_logic_function_tools to discover`,
+          `  Don't know which tool exists at all? get_tool_catalog with ONE category from the list above, then learn_tools, then execute_tool.`,
+        ]),
     ``,
-    `Skills vs Tools:`,
-    `  Skills = documentation (load_skills) — teach HOW to do something, correct schemas and patterns`,
-    `  Tools  = execution (execute_tool)    — let you DO something`,
-    `  For complex tasks (workflows, metadata), load the matching skill BEFORE calling tools.`,
-    `  ⚠️ Never call workflow or metadata tools without loading their skill first.`,
+    ...buildMcpSkillsVersusToolsInstructionLines(
+      isDirectMode
+        ? `  Tools  = execution (call directly)   — let you DO something`
+        : `  Tools  = execution (execute_tool)    — let you DO something`,
+    ),
     ``,
-    `Dashboards:`,
-    `  To create/build/modify a dashboard, load the dashboard-building skill first, then resolve metadata and build.`,
-    `  Once metadata is resolved, emit create_complete_dashboard in the same turn — never stop on a "now let me…" preamble.`,
-    `  If a referenced field is missing (e.g. lead source, won/lost stage), pick a sensible default and state the assumption instead of stalling.`,
-    `  Informational dashboard questions ("what is a dashboard?") are NOT build requests — answer directly, do not load skill.`,
+    ...MCP_SHARED_INSTRUCTION_LINES.dashboards,
     ``,
     `Route by intent:`,
     `  Named entity ("Acme company")   → find_many_{objects} to resolve id first, then operate on id`,
@@ -52,27 +86,26 @@ export const buildMcpServerInstructions = (
     `  Multiple metrics                → run parallel group_by calls, merge results`,
     `  Per-record updates (different data per record) → find_many_{objects} first, then upsert_many_{objects} with each record's id (or other unique identifier) and new values`,
     `  Bulk update (same data for all) → update_many_{objects}`,
-    `  Non-CRUD task                   → use tool name from the list above + learn_tools for schema`,
+    `  Merge duplicate records         → find_many_{objects} to get their ids, merge_many_{objects} with dryRun: true to preview, ask the user which record to keep when values conflict, then merge_many_{objects}. Never copy fields and delete a record: that loses its linked records`,
+    isDirectMode
+      ? `  Non-CRUD task                   → call the matching tool directly`
+      : `  Non-CRUD task                   → use tool name from the list above + learn_tools for schema`,
     ``,
-    `Execution rules:`,
-    `  Independent tool calls          → run in parallel`,
-    `  Dependent operations            → run sequentially (find-then-mutate)`,
+    ...MCP_SHARED_INSTRUCTION_LINES.executionRules,
     ``,
-    `Data efficiency:`,
-    `  Default limit: 10. Only increase if user explicitly needs more.`,
-    `  Always apply filters to narrow results — don't fetch all records of a type.`,
+    ...MCP_SHARED_INSTRUCTION_LINES.dataEfficiency,
     `  Use batch tools (create_many_*, upsert_many_*, update_many_*) instead of looping single-item calls.`,
     ``,
     `Destructive operations (delete_one, delete_many):`,
     `  1. Run find_many_{objects} with the same filter — state record count to user`,
     `  2. Wait for explicit confirmation before executing`,
     ``,
-    `Twenty primitives:`,
-    `  Favorites are navigation menu items. To favorite something, call create_navigation_menu_item with scope: 'user'.`,
-    `  A default OBJECT navigation item is auto-created with create_object_metadata — do not add another.`,
-    `  http_request is ONLY for external third-party APIs, never for Twenty's own data.`,
+    ...buildMcpTwentyPrimitivesInstructionLines({
+      hasHttpRequestTool: availableActionTools.has('http_request'),
+      hasFileUploadTools: availableActionTools.has('create_file_upload'),
+      fileUploadUsageLine: `Use that fileId in a FILES value (create_one_attachment file: [{ fileId, label }] and the target*Id, or a FILES field on create_one_* / update_one_*) or in code_interpreter.files. update_many does not copy FILES values; update_one replaces the whole FILES list.`,
+    }),
     ``,
-    `On tool failure: read the error message, do not retry silently, report to user.`,
-    `Present results as readable summaries, not raw JSON.`,
-    `For large result sets, show count + first N records and offer to paginate.`,
+    ...MCP_SHARED_INSTRUCTION_LINES.resultReporting,
   ].join('\n');
+};

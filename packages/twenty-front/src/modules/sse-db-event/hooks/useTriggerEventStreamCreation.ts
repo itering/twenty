@@ -1,4 +1,5 @@
 import { dispatchBrowserEvent } from '@/browser-event/utils/dispatchBrowserEvent';
+import { dispatchQueueJobEventsFromSseToBrowserEvents } from '@/sse-db-event/utils/dispatchQueueJobEventsFromSseToBrowserEvents';
 import { SSE_CLIENT_RECONNECTED_EVENT_NAME } from '@/sse-db-event/constants/SseClientReconnectedEventName';
 import { ON_EVENT_SUBSCRIPTION } from '@/sse-db-event/graphql/subscriptions/OnEventSubscription';
 import { useDispatchMetadataEventsFromSseToBrowserEvents } from '@/sse-db-event/hooks/useDispatchMetadataEventsFromSseToBrowserEvents';
@@ -12,6 +13,7 @@ import { shouldDestroyEventStreamState } from '@/sse-db-event/states/shouldDestr
 import { sseClientState } from '@/sse-db-event/states/sseClientState';
 import { sseEventStreamIdState } from '@/sse-db-event/states/sseEventStreamIdState';
 import { sseEventStreamReadyState } from '@/sse-db-event/states/sseEventStreamReadyState';
+import { isCurrentEventStream } from '@/sse-db-event/utils/isCurrentEventStream';
 import { isGracefullyHandledEventStreamError } from '@/sse-db-event/utils/isGracefullyHandledEventStreamError';
 import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
 import { captureException } from '@sentry/react';
@@ -21,6 +23,7 @@ import { print, type ExecutionResult } from 'graphql';
 import { useStore } from 'jotai';
 import { useCallback } from 'react';
 import { isDefined } from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
 import { v4 } from 'uuid';
 import { type EventSubscription } from '~/generated-metadata/graphql';
 import { getGraphqlErrorExtensionsFromError } from '~/utils/get-graphql-error-extensions-from-error.util';
@@ -116,7 +119,9 @@ export const useTriggerEventStreamCreation = () => {
             ) {
               captureException(
                 new Error(
-                  `SSE subscription error: ${value.errors[0]?.message}`,
+                  doNotTranslate(
+                    `SSE subscription error: ${value.errors[0]?.message}`,
+                  ),
                 ),
               );
             }
@@ -126,99 +131,54 @@ export const useTriggerEventStreamCreation = () => {
             return;
           }
 
-          handleFirstEventReceived();
+          try {
+            handleFirstEventReceived();
 
-          const eventSubscription = value?.data?.onEventSubscription;
+            const eventSubscription = value?.data?.onEventSubscription;
 
-          const objectRecordEventsWithQueryIds =
-            eventSubscription?.objectRecordEventsWithQueryIds ?? [];
+            const objectRecordEventsWithQueryIds =
+              eventSubscription?.objectRecordEventsWithQueryIds ?? [];
 
-          const metadataEvents = eventSubscription?.metadataEvents ?? [];
+            const metadataEvents = eventSubscription?.metadataEvents ?? [];
 
-          const objectRecordEvents = objectRecordEventsWithQueryIds.map(
-            (item) => item.objectRecordEvent,
-          );
+            const queueJobEvents = eventSubscription?.queueJobEvents ?? [];
 
-          dispatchMetadataEventsFromSseToBrowserEvents(metadataEvents);
+            const objectRecordEvents = objectRecordEventsWithQueryIds.map(
+              (item) => item.objectRecordEvent,
+            );
 
-          triggerOptimisticEffectFromSseEvents({
-            objectRecordEvents,
-          });
+            dispatchMetadataEventsFromSseToBrowserEvents(metadataEvents);
 
-          dispatchObjectRecordEventsFromSseToBrowserEvents(
-            objectRecordEventsWithQueryIds,
-          );
+            dispatchQueueJobEventsFromSseToBrowserEvents(queueJobEvents);
+
+            triggerOptimisticEffectFromSseEvents({
+              objectRecordEvents,
+            });
+
+            dispatchObjectRecordEventsFromSseToBrowserEvents(
+              objectRecordEventsWithQueryIds,
+            );
+          } catch (error) {
+            const errorProcessingSSEMessage = new Error(
+              doNotTranslate('Error while processing SSE message'),
+              { cause: error instanceof Error ? error : undefined },
+            );
+
+            captureException(errorProcessingSSEMessage);
+          }
         },
         error: (error) => {
           captureException(error);
           store.set(shouldDestroyEventStreamState.atom, true);
         },
         complete: () => {
-          store.set(shouldDestroyEventStreamState.atom, true);
-        },
-      },
-      {
-        message: ({ data, event }) => {
-          const result = data as ExecutionResult<{
-            onEventSubscription: EventSubscription;
-          }>;
-
-          try {
-            if (event === 'next') {
-              store.set(lastSseEventReceivedTimestampState.atom, Date.now());
-
-              if (isDefined(result?.errors)) {
-                const extensions = getGraphqlErrorExtensionsFromError(
-                  result.errors[0],
-                );
-
-                if (
-                  !isGracefullyHandledEventStreamError({
-                    subCode: extensions?.subCode,
-                    code: extensions?.code,
-                  })
-                ) {
-                  for (const error of result.errors) {
-                    captureException(error);
-                  }
-                }
-
-                store.set(shouldDestroyEventStreamState.atom, true);
-              } else {
-                handleFirstEventReceived();
-
-                const objectRecordEventsWithQueryIds =
-                  result?.data?.onEventSubscription
-                    ?.objectRecordEventsWithQueryIds ?? [];
-
-                const objectRecordEvents = objectRecordEventsWithQueryIds.map(
-                  (objectRecordEventWithQueryIds) => {
-                    return objectRecordEventWithQueryIds.objectRecordEvent;
-                  },
-                );
-
-                const metadataEvents =
-                  result?.data?.onEventSubscription?.metadataEvents ?? [];
-
-                dispatchMetadataEventsFromSseToBrowserEvents(metadataEvents);
-
-                triggerOptimisticEffectFromSseEvents({
-                  objectRecordEvents,
-                });
-
-                dispatchObjectRecordEventsFromSseToBrowserEvents(
-                  objectRecordEventsWithQueryIds,
-                );
-              }
-            }
-          } catch (error) {
-            const errorProcessingSSEMessage = new Error(
-              'Error while processing SSE message',
-              { cause: error instanceof Error ? error : undefined },
-            );
-
-            captureException(errorProcessingSSEMessage);
+          if (
+            !isCurrentEventStream({ store, eventStreamId: newSseEventStreamId })
+          ) {
+            return;
           }
+
+          store.set(shouldDestroyEventStreamState.atom, true);
         },
       },
     );

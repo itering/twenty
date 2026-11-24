@@ -16,8 +16,6 @@ describe('withResolvedToolAuthContext', () => {
     overrides?: Partial<ToolProviderContext>,
   ): ToolProviderContext => ({
     workspaceId,
-    roleId: 'role-1',
-    rolePermissionConfig: { unionOf: ['role-1'] },
     ...overrides,
   });
 
@@ -38,17 +36,11 @@ describe('withResolvedToolAuthContext', () => {
         deletedAt: null,
       }),
     },
-    userWorkspaceRepository: {
-      findOne: jest.fn().mockResolvedValue({
-        id: userWorkspaceId,
-        userId,
-        workspaceId,
-      }),
-    },
     workspaceCacheService: {
       getOrRecompute: jest.fn().mockResolvedValue({
         flatWorkspaceMemberMaps: {
           idByUserId: { [userId]: workspaceMemberId },
+          userWorkspaceIdByUserId: { [userId]: userWorkspaceId },
           byId: {
             [workspaceMemberId]: {
               id: workspaceMemberId,
@@ -101,7 +93,7 @@ describe('withResolvedToolAuthContext', () => {
       workspaceMemberId,
       user: { id: userId },
       workspaceMember: { id: workspaceMemberId },
-    } as unknown as WorkspaceAuthContext;
+    } as WorkspaceAuthContext;
 
     let storeDuringDispatch: WorkspaceAuthContext | undefined;
 

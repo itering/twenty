@@ -2,9 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 
 import { isDefined } from 'twenty-shared/utils';
 
+import { ConnectionProviderExceptionCode } from 'src/engine/core-modules/application/connection-provider/connection-provider-exception-code.enum';
+import { ConnectionProviderOAuthClientService } from 'src/engine/core-modules/application/connection-provider/oauth-client/connection-provider-oauth-client.service';
 import { ConnectionProviderException } from 'src/engine/core-modules/application/connection-provider/connection-provider.exception';
 import { ConnectionProviderService } from 'src/engine/core-modules/application/connection-provider/connection-provider.service';
-import { assertOAuthProvider } from 'src/engine/core-modules/application/connection-provider/utils/assert-oauth-provider.util';
 import { exchangeRefreshTokenForToken } from 'src/engine/core-modules/application/connection-provider/utils/exchange-refresh-token-for-token.util';
 import { OAuthTokenEndpointError } from 'src/engine/core-modules/application/connection-provider/utils/post-oauth-token-request.util';
 import { type PlaintextString } from 'src/engine/core-modules/secret-encryption/branded-strings/plaintext-string.type';
@@ -22,6 +23,7 @@ export class AppOAuthRefreshAccessTokenService {
 
   constructor(
     private readonly connectionProviderService: ConnectionProviderService,
+    private readonly oauthClientService: ConnectionProviderOAuthClientService,
     private readonly secureHttpClientService: SecureHttpClientService,
   ) {}
 
@@ -36,18 +38,16 @@ export class AppOAuthRefreshAccessTokenService {
       );
     }
 
-    const { provider, clientId, clientSecret } = await this.resolveProvider(
-      connectedAccount.connectionProviderId,
-    );
+    const { provider, client } = await this.resolveClient({
+      connectionProviderId: connectedAccount.connectionProviderId,
+      workspaceId: connectedAccount.workspaceId,
+    });
 
     try {
       const tokenResponse = await exchangeRefreshTokenForToken({
         fetchFn: this.secureHttpClientService.createSsrfSafeFetch(),
-        tokenEndpoint: provider.oauthConfig.tokenEndpoint,
-        clientId,
-        clientSecret,
+        client,
         refreshToken,
-        contentType: provider.oauthConfig.tokenRequestContentType,
       });
 
       return {
@@ -57,8 +57,16 @@ export class AppOAuthRefreshAccessTokenService {
         refreshToken: isDefined(tokenResponse.refreshToken)
           ? tokenResponse.refreshToken
           : refreshToken,
+        accessTokenExpiresAt: tokenResponse.accessTokenExpiresAt,
       };
     } catch (error) {
+      await this.oauthClientService.forgetClientIfRejected({
+        provider,
+        workspaceId: connectedAccount.workspaceId,
+        client,
+        error,
+      });
+
       this.logger.warn(
         `App OAuth refresh failed for connected account ${connectedAccount.id}: ${(error as Error).message}`,
       );
@@ -77,24 +85,39 @@ export class AppOAuthRefreshAccessTokenService {
     }
   }
 
-  private async resolveProvider(connectionProviderId: string) {
+  private async resolveClient({
+    connectionProviderId,
+    workspaceId,
+  }: {
+    connectionProviderId: string;
+    workspaceId: string;
+  }) {
     try {
-      const provider =
-        await this.connectionProviderService.findOneByIdOrThrow(
-          connectionProviderId,
+      const provider = await this.connectionProviderService.findOneByIdOrThrow({
+        id: connectionProviderId,
+        workspaceId,
+      });
+
+      if (provider.type !== 'oauth' && provider.type !== 'oauth-discovery') {
+        throw new ConnectedAccountRefreshAccessTokenException(
+          `Connection provider ${provider.id} of type ${provider.type} cannot refresh tokens`,
+          ConnectedAccountRefreshAccessTokenExceptionCode.PROVIDER_NOT_SUPPORTED,
         );
+      }
 
-      assertOAuthProvider(provider);
+      const client = await this.oauthClientService.resolveForTokenRequest({
+        provider,
+        workspaceId,
+      });
 
-      const { clientId, clientSecret } =
-        await this.connectionProviderService.getClientCredentials(provider);
-
-      return { provider, clientId, clientSecret };
+      return { provider, client };
     } catch (error) {
       if (error instanceof ConnectionProviderException) {
         throw new ConnectedAccountRefreshAccessTokenException(
           error.message,
-          ConnectedAccountRefreshAccessTokenExceptionCode.PROVIDER_NOT_SUPPORTED,
+          error.code === ConnectionProviderExceptionCode.TOKEN_EXCHANGE_FAILED
+            ? ConnectedAccountRefreshAccessTokenExceptionCode.INVALID_REFRESH_TOKEN
+            : ConnectedAccountRefreshAccessTokenExceptionCode.PROVIDER_NOT_SUPPORTED,
         );
       }
 

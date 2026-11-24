@@ -3,11 +3,16 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   type QueueCronJobOptions,
   type QueueJobOptions,
+  type QueueJobSettings,
 } from 'src/engine/core-modules/message-queue/drivers/interfaces/job-options.interface';
 import {
+  type BulkAddResult,
   type InFlightQueueJob,
   MessageQueueDriver,
+  type QueueJobDetails,
+  type QueueJobToAdd,
 } from 'src/engine/core-modules/message-queue/drivers/interfaces/message-queue-driver.interface';
+import { type JobMemoryReconciliation } from 'src/engine/core-modules/message-queue/drivers/memory/job-memory-limiter';
 import {
   type MessageQueueJobData,
   type MessageQueueJob,
@@ -33,17 +38,27 @@ export class MessageQueueService {
   add<T extends MessageQueueJobData>(
     jobName: string,
     data: T,
-    options?: QueueJobOptions,
-  ): Promise<void> {
+    options: QueueJobOptions,
+  ): Promise<string | undefined> {
     return this.driver.add(this.queueName, jobName, data, options);
   }
 
   bulkAdd<T extends MessageQueueJobData>(
     jobName: string,
-    dataItems: T[],
-    options?: QueueJobOptions,
-  ): Promise<void> {
-    return this.driver.bulkAdd(this.queueName, jobName, dataItems, options);
+    jobs: QueueJobToAdd<T>[],
+    options?: QueueJobSettings,
+  ): Promise<BulkAddResult> {
+    return this.driver.bulkAdd(this.queueName, jobName, jobs, options);
+  }
+
+  getJobs<T extends MessageQueueJobData>(
+    jobIds: string[],
+  ): Promise<Partial<Record<string, QueueJobDetails<T>>>> {
+    if (typeof this.driver.getJobs !== 'function') {
+      return Promise.resolve({});
+    }
+
+    return this.driver.getJobs(this.queueName, jobIds);
   }
 
   getInFlightJobs<T extends MessageQueueJobData>(): Promise<
@@ -54,6 +69,22 @@ export class MessageQueueService {
     }
 
     return this.driver.getInFlightJobs(this.queueName);
+  }
+
+  removeJob(jobId: string): Promise<boolean> {
+    if (typeof this.driver.removeJob !== 'function') {
+      return Promise.resolve(false);
+    }
+
+    return this.driver.removeJob(this.queueName, jobId);
+  }
+
+  reconcileJobMemory(): Promise<JobMemoryReconciliation> {
+    if (typeof this.driver.reconcileJobMemory !== 'function') {
+      return Promise.resolve({ releasedCount: 0, releasedBytes: 0 });
+    }
+
+    return this.driver.reconcileJobMemory();
   }
 
   addCron<T extends MessageQueueJobData | undefined>({

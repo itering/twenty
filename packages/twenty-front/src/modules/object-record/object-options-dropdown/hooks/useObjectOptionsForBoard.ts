@@ -1,4 +1,3 @@
-import { type DraggableListDropResult } from '@/ui/layout/draggable-list/types/DraggableListDropResult';
 import { useCallback, useMemo } from 'react';
 
 import { useColumnDefinitionsFromObjectMetadata } from '@/object-metadata/hooks/useColumnDefinitionsFromObjectMetadata';
@@ -7,16 +6,18 @@ import { useReorderVisibleRecordFields } from '@/object-record/record-field/hook
 import { useUpdateRecordField } from '@/object-record/record-field/hooks/useUpdateRecordField';
 import { useUpsertRecordField } from '@/object-record/record-field/hooks/useUpsertRecordField';
 import { currentRecordFieldsComponentState } from '@/object-record/record-field/states/currentRecordFieldsComponentState';
+import { findCanonicalRecordField } from '@/object-record/record-field/utils/findCanonicalRecordField';
 import { type RecordField } from '@/object-record/record-field/types/RecordField';
 import { type FieldMetadata } from '@/object-record/record-field/ui/types/FieldMetadata';
 import { recordIndexFieldDefinitionsState } from '@/object-record/record-index/states/recordIndexFieldDefinitionsState';
 import { type ColumnDefinition } from '@/object-record/record-table/types/ColumnDefinition';
 import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
-import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
+import { useAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentState';
 import { useSaveCurrentViewFields } from '@/views/hooks/useSaveCurrentViewFields';
 import { mapRecordFieldToViewField } from '@/views/utils/mapRecordFieldToViewField';
 import { produce } from 'immer';
 import { findByProperty, isDefined } from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
 import { v4 } from 'uuid';
 import { mapArrayToObject } from '~/utils/array/mapArrayToObject';
 import { sortByProperty } from '~/utils/array/sortByProperty';
@@ -32,7 +33,7 @@ export const useObjectOptionsForBoard = ({
   recordBoardId,
 }: useObjectOptionsForBoardParams) => {
   const [recordIndexFieldDefinitions, setRecordIndexFieldDefinitions] =
-    useAtomState(recordIndexFieldDefinitionsState);
+    useAtomComponentState(recordIndexFieldDefinitionsState, recordBoardId);
 
   const { saveViewFields } = useSaveCurrentViewFields();
 
@@ -93,14 +94,16 @@ export const useObjectOptionsForBoard = ({
   );
 
   const handleReorderBoardFields = useCallback(
-    (result: DraggableListDropResult) => {
-      if (!result.destination) {
-        return;
-      }
-
+    ({
+      recordFieldToMove,
+      targetRecordField,
+    }: {
+      recordFieldToMove: Pick<RecordField, 'id'>;
+      targetRecordField: Pick<RecordField, 'id'>;
+    }) => {
       const updatedRecordField = reorderVisibleRecordFields({
-        fromIndex: result.source.index - 1,
-        toIndex: result.destination.index - 1,
+        recordFieldToMove,
+        targetRecordField,
       });
 
       saveViewFields([mapRecordFieldToViewField(updatedRecordField)]);
@@ -138,14 +141,13 @@ export const useObjectOptionsForBoard = ({
   const { updateRecordField } = useUpdateRecordField(recordBoardId);
   const { upsertRecordField } = useUpsertRecordField(recordBoardId);
 
-  // Todo : this seems over complex and should at least be extracted to an util with unit test.
-  // Let's refactor this as we introduce the new viewBar
+  // TODO: overly complex; extract to a unit-tested util.
   const handleBoardFieldVisibilityChange = useCallback(
     async (
       updatedFieldDefinition: Pick<
         ColumnDefinition<FieldMetadata>,
         'fieldMetadataId' | 'isVisible'
-      >,
+      > & { recordFieldId?: string },
     ) => {
       const lastPosition = currentRecordFields.toSorted(
         sortByProperty('position', 'desc'),
@@ -153,11 +155,17 @@ export const useObjectOptionsForBoard = ({
 
       const shouldShowFieldMetadataItem =
         updatedFieldDefinition.isVisible === true;
-      const corresponingRecordField = currentRecordFields.find(
-        (recordFieldToFind) =>
-          recordFieldToFind.fieldMetadataItemId ===
-          updatedFieldDefinition.fieldMetadataId,
-      );
+      const corresponingRecordField = isDefined(
+        updatedFieldDefinition.recordFieldId,
+      )
+        ? currentRecordFields.find(
+            (recordFieldToFind) =>
+              recordFieldToFind.id === updatedFieldDefinition.recordFieldId,
+          )
+        : findCanonicalRecordField({
+            recordFields: currentRecordFields,
+            fieldMetadataItemId: updatedFieldDefinition.fieldMetadataId,
+          });
 
       const noExistingRecordField = !isDefined(corresponingRecordField);
 
@@ -187,7 +195,9 @@ export const useObjectOptionsForBoard = ({
           (draftRecordIndexFieldDefinitions) => {
             if (!isDefined(correspondingAvailableColumnDefinition)) {
               throw new Error(
-                `correspondingAvailableColumnDefinition is not defined this should not happen.`,
+                doNotTranslate(
+                  `correspondingAvailableColumnDefinition is not defined this should not happen.`,
+                ),
               );
             }
 
@@ -202,7 +212,7 @@ export const useObjectOptionsForBoard = ({
         // TODO: remove after refactor
         setRecordIndexFieldDefinitions(modifiedRecordIndexFieldDefinitions);
       } else {
-        updateRecordField(updatedFieldDefinition.fieldMetadataId, {
+        updateRecordField(corresponingRecordField.id, {
           isVisible: shouldShowFieldMetadataItem,
         });
 

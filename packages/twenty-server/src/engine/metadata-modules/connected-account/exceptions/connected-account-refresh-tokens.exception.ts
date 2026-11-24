@@ -1,6 +1,6 @@
 import { type MessageDescriptor } from '@lingui/core';
 import { msg } from '@lingui/core/macro';
-import { assertUnreachable } from 'twenty-shared/utils';
+import { assertUnreachable, isDefined } from 'twenty-shared/utils';
 
 import { CustomException } from 'src/utils/custom-exception';
 
@@ -10,6 +10,7 @@ export enum ConnectedAccountRefreshAccessTokenExceptionCode {
   PROVIDER_NOT_SUPPORTED = 'PROVIDER_NOT_SUPPORTED',
   TEMPORARY_NETWORK_ERROR = 'TEMPORARY_NETWORK_ERROR',
   ACCESS_TOKEN_NOT_FOUND = 'ACCESS_TOKEN_NOT_FOUND',
+  CONNECTED_ACCOUNT_NOT_FOUND = 'CONNECTED_ACCOUNT_NOT_FOUND',
 }
 
 const getConnectedAccountRefreshAccessTokenExceptionUserFriendlyMessage = (
@@ -26,21 +27,32 @@ const getConnectedAccountRefreshAccessTokenExceptionUserFriendlyMessage = (
       return msg`A temporary network error occurred.`;
     case ConnectedAccountRefreshAccessTokenExceptionCode.ACCESS_TOKEN_NOT_FOUND:
       return msg`Access token not found.`;
+    case ConnectedAccountRefreshAccessTokenExceptionCode.CONNECTED_ACCOUNT_NOT_FOUND:
+      return msg`Connected account not found.`;
     default:
       assertUnreachable(code);
   }
 };
 
 export class ConnectedAccountRefreshAccessTokenException extends CustomException<ConnectedAccountRefreshAccessTokenExceptionCode> {
+  cause?: unknown;
+
   constructor(
     message: string,
     code: ConnectedAccountRefreshAccessTokenExceptionCode,
-    { userFriendlyMessage }: { userFriendlyMessage?: MessageDescriptor } = {},
+    {
+      userFriendlyMessage,
+      cause,
+    }: { userFriendlyMessage?: MessageDescriptor; cause?: unknown } = {},
   ) {
     super(message, code, {
       userFriendlyMessage:
         userFriendlyMessage ??
         getConnectedAccountRefreshAccessTokenExceptionUserFriendlyMessage(code),
     });
+
+    if (isDefined(cause)) {
+      this.cause = cause;
+    }
   }
 }

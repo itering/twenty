@@ -1,4 +1,4 @@
-import { makeMetadataAPIRequest } from 'test/integration/metadata/suites/utils/make-metadata-api-request.util';
+import { makeMetadataApiRequest } from 'test/integration/metadata/suites/utils/make-metadata-api-request.util';
 import { findViewFiltersQueryFactory } from 'test/integration/metadata/suites/view-filter/utils/find-view-filters-query-factory.util';
 import { type CommonResponseBody } from 'test/integration/metadata/types/common-response-body.type';
 import { warnIfErrorButNotExpectedToFail } from 'test/integration/metadata/utils/warn-if-error-but-not-expected-to-fail.util';
@@ -10,10 +10,12 @@ export const findViewFilters = async ({
   viewId,
   gqlFields,
   expectToFail,
+  token,
 }: {
   viewId?: string;
   gqlFields?: string;
   expectToFail?: boolean;
+  token?: string;
 }): CommonResponseBody<{
   getViewFilters: ViewFilterDTO[];
 }> => {
@@ -22,7 +24,7 @@ export const findViewFilters = async ({
     gqlFields,
   });
 
-  const response = await makeMetadataAPIRequest(graphqlOperation);
+  const response = await makeMetadataApiRequest(graphqlOperation, token);
 
   if (expectToFail === true) {
     warnIfNoErrorButExpectedToFail({

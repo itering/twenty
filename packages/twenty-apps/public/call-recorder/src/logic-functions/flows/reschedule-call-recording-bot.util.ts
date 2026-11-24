@@ -1,22 +1,29 @@
 import { isUndefined } from '@sniptt/guards';
 import { type CoreApiClient } from 'twenty-client-sdk/core';
 
+import { CallRecordingStatus } from 'src/logic-functions/constants/call-recording-status';
+import { RECALL_API_NOT_FOUND_STATUS } from 'src/logic-functions/constants/recall-api-not-found-status';
 import { type MeetingRecording } from 'src/logic-functions/types/meeting-recording.type';
 import { buildRecallRoutingMetadata } from 'src/logic-functions/domain/build-recall-routing-metadata.util';
 import { computeRecallBotJoinAt } from 'src/logic-functions/domain/compute-recall-bot-join-at.util';
+import { isRecallBotJoinWithinSettingsUpdateCutoff } from 'src/logic-functions/domain/is-recall-bot-join-within-settings-update-cutoff.util';
+import { enqueueCallRecordingRequestFollowUps } from 'src/logic-functions/data/enqueue-call-recording-request-follow-ups.util';
+import { enqueuePreJoinCreditCheck } from 'src/logic-functions/data/enqueue-pre-join-credit-check.util';
+import { findCallRecordingsByIds } from 'src/logic-functions/data/find-call-recordings-by-ids.util';
 import { getCurrentWorkspaceId } from 'src/logic-functions/data/get-current-workspace-id.util';
 import { rescheduleRecallBot } from 'src/logic-functions/recall-api/reschedule-recall-bot.util';
 import { updateCallRecording } from 'src/logic-functions/data/update-call-recording.util';
 
-const RECALL_BOT_NOT_FOUND_STATUS = 404;
-
 export const rescheduleCallRecordingBot = async (
-  client: CoreApiClient,
+  client: Pick<CoreApiClient, 'query' | 'mutation'>,
   { callRecording, calendarEvent }: MeetingRecording,
 ): Promise<void> => {
   const externalBotId = callRecording.externalBotId;
 
-  if (isUndefined(externalBotId)) {
+  if (
+    isUndefined(externalBotId) ||
+    callRecording.status !== CallRecordingStatus.SCHEDULED
+  ) {
     return;
   }
 
@@ -28,6 +35,10 @@ export const rescheduleCallRecordingBot = async (
   }
 
   const joinAt = computeRecallBotJoinAt(meetingStartsAt);
+
+  if (isRecallBotJoinWithinSettingsUpdateCutoff({ joinAt, now: new Date() })) {
+    return;
+  }
 
   const workspaceId = getCurrentWorkspaceId();
 
@@ -51,6 +62,14 @@ export const rescheduleCallRecordingBot = async (
   });
 
   if (rescheduleResult.ok) {
+    // The queued check is keyed to the previous join time; a moved join needs its own.
+    await enqueuePreJoinCreditCheck({
+      callRecordingId: callRecording.id,
+      externalBotId,
+      joinAt,
+      bookedJoinAt: joinAt,
+    });
+
     return;
   }
 
@@ -58,7 +77,21 @@ export const rescheduleCallRecordingBot = async (
   // single writer. The recorded attempt state is resolved (its bot is
   // confirmed gone), so clearing it lets recovery schedule directly instead
   // of treating the row as an ambiguous attempt.
-  if (rescheduleResult.status === RECALL_BOT_NOT_FOUND_STATUS) {
+  if (rescheduleResult.status === RECALL_API_NOT_FOUND_STATUS) {
+    const currentCallRecording = (
+      await findCallRecordingsByIds(client, [callRecording.id])
+    )[0];
+
+    if (
+      isUndefined(currentCallRecording) ||
+      currentCallRecording.externalBotId !== externalBotId
+    ) {
+      return;
+    }
+
+    await enqueueCallRecordingRequestFollowUps({
+      callRecordingIds: [callRecording.id],
+    });
     await updateCallRecording(client, {
       id: callRecording.id,
       data: {

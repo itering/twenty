@@ -1,11 +1,14 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
+import { ConnectedAccountProvider } from 'twenty-shared/types';
+import { EMPTY_EMAIL_DOCUMENT } from 'twenty-shared/utils';
 import { WorkflowActionType } from 'twenty-shared/workflow';
 import { SendEmailTool } from 'src/engine/core-modules/tool/tools/email-tool/send-email-tool';
 import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
 import { ConnectedAccountEntity } from 'src/engine/metadata-modules/connected-account/entities/connected-account.entity';
-import { GlobalWorkspaceOrmManager } from 'src/engine/twenty-orm/global-workspace-datasource/global-workspace-orm.manager';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { WorkflowExecutionContextService } from 'src/modules/workflow/workflow-executor/services/workflow-execution-context.service';
 import { SendEmailWorkflowAction } from 'src/modules/workflow/workflow-executor/workflow-actions/mail-sender/send-email.workflow-action';
 import { type WorkflowActionSettings } from 'src/modules/workflow/workflow-executor/workflow-actions/types/workflow-action-settings.type';
 import { type WorkflowAction } from 'src/modules/workflow/workflow-executor/workflow-actions/types/workflow-action.type';
@@ -14,7 +17,7 @@ import { WorkflowRunStepLogWorkspaceService } from 'src/modules/workflow/workflo
 const baseSettings: WorkflowActionSettings = {
   outputSchema: {},
   errorHandlingOptions: {
-    retryOnFailure: { value: false },
+    retryOnFailure: { value: 0 },
     continueOnFailure: { value: false },
   },
   input: {},
@@ -42,7 +45,7 @@ const MEMBER_ACCOUNT_ID = '20202020-5555-4555-8555-555555555555';
 describe('SendEmailWorkflowAction', () => {
   let action: SendEmailWorkflowAction;
   let mockSendEmailTool: jest.Mocked<Pick<SendEmailTool, 'execute'>>;
-  let connectedAccountRepository: { findOne: jest.Mock };
+  let connectedAccountRepository: { find: jest.Mock };
   let userWorkspaceRepository: { findOne: jest.Mock };
   let workspaceMemberRepository: { findOne: jest.Mock };
 
@@ -55,7 +58,7 @@ describe('SendEmailWorkflowAction', () => {
         error: undefined,
       }),
     };
-    connectedAccountRepository = { findOne: jest.fn() };
+    connectedAccountRepository = { find: jest.fn() };
     userWorkspaceRepository = { findOne: jest.fn() };
     workspaceMemberRepository = { findOne: jest.fn() };
 
@@ -68,12 +71,23 @@ describe('SendEmailWorkflowAction', () => {
           useValue: { setStepLog: jest.fn() },
         },
         {
-          provide: GlobalWorkspaceOrmManager,
+          provide: WorkflowExecutionContextService,
+          useValue: {
+            getExecutionContext: jest.fn().mockResolvedValue({
+              authContext: { type: 'application' },
+              isActingOnBehalfOfUser: false,
+              workflowId: 'workflow-id',
+              workflowName: 'Churn win-back',
+            }),
+          },
+        },
+        {
+          provide: WorkspaceOrmManager,
           useValue: {
             executeInWorkspaceContext: jest.fn((callback) => callback()),
-            getRepository: jest
+            getRepositoryWithoutPermissionChecks: jest
               .fn()
-              .mockResolvedValue(workspaceMemberRepository),
+              .mockReturnValue(workspaceMemberRepository),
           },
         },
         {
@@ -106,10 +120,7 @@ describe('SendEmailWorkflowAction', () => {
       },
     });
 
-  const executedBodyDocument = () =>
-    JSON.parse(
-      mockSendEmailTool.execute.mock.calls[0][0].body as string,
-    ) as Record<string, unknown>;
+  const executedBody = () => mockSendEmailTool.execute.mock.calls[0][0].body;
 
   describe('email body handling', () => {
     it('should prepare TipTap JSON for the shared email compiler', async () => {
@@ -125,7 +136,7 @@ describe('SendEmailWorkflowAction', () => {
 
       await executeWithBody(tipTapBody);
 
-      expect(executedBodyDocument()).toEqual(JSON.parse(tipTapBody));
+      expect(executedBody()).toEqual(JSON.parse(tipTapBody));
     });
 
     it('should resolve variableTag nodes inside TipTap JSON before compilation', async () => {
@@ -146,7 +157,7 @@ describe('SendEmailWorkflowAction', () => {
 
       await executeWithBody(tipTapBodyWithVariable);
 
-      expect(executedBodyDocument()).toEqual({
+      expect(executedBody()).toEqual({
         type: 'doc',
         content: [
           {
@@ -182,7 +193,7 @@ describe('SendEmailWorkflowAction', () => {
         }),
       );
 
-      expect(executedBodyDocument()).toEqual({
+      expect(executedBody()).toEqual({
         type: 'doc',
         content: [
           {
@@ -223,7 +234,7 @@ describe('SendEmailWorkflowAction', () => {
         },
       });
 
-      expect(executedBodyDocument()).toEqual({
+      expect(executedBody()).toEqual({
         type: 'doc',
         content: [
           {
@@ -263,7 +274,7 @@ describe('SendEmailWorkflowAction', () => {
         },
       });
 
-      expect(executedBodyDocument()).toEqual({
+      expect(executedBody()).toEqual({
         type: 'doc',
         content: [
           {
@@ -274,47 +285,18 @@ describe('SendEmailWorkflowAction', () => {
       });
     });
 
-    it('should reject an invalid structured email document', async () => {
-      await expect(
-        executeWithBody(
-          JSON.stringify({
-            type: 'doc',
-            content: [{ type: 'unknownBlock' }],
-          }),
-        ),
-      ).rejects.toThrow('Invalid workflow email document');
+    it('should not run the tool when the body is not an email document', async () => {
+      await expect(executeWithBody('<p>Hello</p>')).rejects.toThrow(
+        'Invalid email document',
+      );
 
       expect(mockSendEmailTool.execute).not.toHaveBeenCalled();
     });
 
-    it('should pass plain text body through without rendering', async () => {
-      await executeWithBody('{{trigger.name}}\n{{trigger.email}}');
-
-      expect(mockSendEmailTool.execute).toHaveBeenCalledWith(
-        expect.objectContaining({ body: 'John\njohn@example.com' }),
-        expect.any(Object),
-      );
-    });
-
-    it('should treat non-TipTap JSON as plain text', async () => {
-      await executeWithBody('{"key":"value"}');
-
-      expect(mockSendEmailTool.execute).toHaveBeenCalledWith(
-        expect.objectContaining({ body: '{"key":"value"}' }),
-        expect.any(Object),
-      );
-    });
-
-    it('should handle empty string body without crashing', async () => {
-      await executeWithBody('');
-
-      expect(mockSendEmailTool.execute).toHaveBeenCalled();
-    });
-
-    it('should handle undefined body without crashing', async () => {
+    it('should send an empty document when the step has no body', async () => {
       await executeWithBody(undefined);
 
-      expect(mockSendEmailTool.execute).toHaveBeenCalled();
+      expect(executedBody()).toEqual(EMPTY_EMAIL_DOCUMENT);
     });
   });
 
@@ -327,7 +309,6 @@ describe('SendEmailWorkflowAction', () => {
             connectedAccountId,
             recipients: { to: 'test@example.com' },
             subject: 'Test',
-            body: 'hi',
           }),
         ],
         context: {},
@@ -339,9 +320,65 @@ describe('SendEmailWorkflowAction', () => {
       userWorkspaceRepository.findOne.mockResolvedValue({
         id: USER_WORKSPACE_ID,
       });
-      connectedAccountRepository.findOne.mockResolvedValue({
-        id: MEMBER_ACCOUNT_ID,
+      connectedAccountRepository.find.mockResolvedValue([
+        {
+          id: MEMBER_ACCOUNT_ID,
+          provider: ConnectedAccountProvider.GOOGLE,
+          connectionParameters: null,
+        },
+      ]);
+
+      await executeWithSender(WORKSPACE_MEMBER_ID);
+
+      expect(mockSendEmailTool.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ connectedAccountId: MEMBER_ACCOUNT_ID }),
+        expect.any(Object),
+      );
+    });
+
+    it('skips an older application connection and picks the member mailbox', async () => {
+      workspaceMemberRepository.findOne.mockResolvedValue({ userId: 'user-1' });
+      userWorkspaceRepository.findOne.mockResolvedValue({
+        id: USER_WORKSPACE_ID,
       });
+      connectedAccountRepository.find.mockResolvedValue([
+        {
+          id: 'app-connection-id',
+          provider: ConnectedAccountProvider.APP,
+          connectionParameters: null,
+        },
+        {
+          id: MEMBER_ACCOUNT_ID,
+          provider: ConnectedAccountProvider.GOOGLE,
+          connectionParameters: null,
+        },
+      ]);
+
+      await executeWithSender(WORKSPACE_MEMBER_ID);
+
+      expect(mockSendEmailTool.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ connectedAccountId: MEMBER_ACCOUNT_ID }),
+        expect.any(Object),
+      );
+    });
+
+    it('skips an imap account with no SMTP configured', async () => {
+      workspaceMemberRepository.findOne.mockResolvedValue({ userId: 'user-1' });
+      userWorkspaceRepository.findOne.mockResolvedValue({
+        id: USER_WORKSPACE_ID,
+      });
+      connectedAccountRepository.find.mockResolvedValue([
+        {
+          id: 'imap-without-smtp-id',
+          provider: ConnectedAccountProvider.IMAP_SMTP_CALDAV,
+          connectionParameters: { IMAP: { host: 'imap.example.com' } },
+        },
+        {
+          id: MEMBER_ACCOUNT_ID,
+          provider: ConnectedAccountProvider.GOOGLE,
+          connectionParameters: null,
+        },
+      ]);
 
       await executeWithSender(WORKSPACE_MEMBER_ID);
 
@@ -356,9 +393,66 @@ describe('SendEmailWorkflowAction', () => {
 
       await executeWithSender(WORKSPACE_MEMBER_ID);
 
-      expect(connectedAccountRepository.findOne).not.toHaveBeenCalled();
+      expect(connectedAccountRepository.find).not.toHaveBeenCalled();
       expect(mockSendEmailTool.execute).toHaveBeenCalledWith(
         expect.objectContaining({ connectedAccountId: WORKSPACE_MEMBER_ID }),
+        expect.any(Object),
+      );
+    });
+
+    it('hands the workflow to the email tool as the acting actor', async () => {
+      workspaceMemberRepository.findOne.mockResolvedValue(null);
+
+      await executeWithSender(WORKSPACE_MEMBER_ID);
+
+      expect(mockSendEmailTool.execute).toHaveBeenCalledTimes(1);
+      expect(mockSendEmailTool.execute).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          actorMetadata: {
+            source: 'WORKFLOW',
+            name: 'Churn win-back',
+            workspaceMemberId: null,
+            context: { workflowId: 'workflow-id' },
+          },
+        }),
+      );
+    });
+
+    it('forwards the configured from handle to the email tool', async () => {
+      await action.execute({
+        currentStepId: 'step-1',
+        steps: [
+          buildSendEmailStep({
+            ...emailInput,
+            fromHandle: 'sales@company.com',
+          }),
+        ],
+        context: {},
+        runInfo: { workspaceId: 'workspace-1', workflowRunId: 'run-1' },
+      });
+
+      expect(mockSendEmailTool.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ fromHandle: 'sales@company.com' }),
+        expect.any(Object),
+      );
+    });
+
+    it('resolves workflow variables inside the from handle', async () => {
+      await action.execute({
+        currentStepId: 'step-1',
+        steps: [
+          buildSendEmailStep({
+            ...emailInput,
+            fromHandle: '{{trigger.email}}',
+          }),
+        ],
+        context: { trigger: { email: 'john@example.com' } },
+        runInfo: { workspaceId: 'workspace-1', workflowRunId: 'run-1' },
+      });
+
+      expect(mockSendEmailTool.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ fromHandle: 'john@example.com' }),
         expect.any(Object),
       );
     });
@@ -368,10 +462,10 @@ describe('SendEmailWorkflowAction', () => {
       userWorkspaceRepository.findOne.mockResolvedValue({
         id: USER_WORKSPACE_ID,
       });
-      connectedAccountRepository.findOne.mockResolvedValue(null);
+      connectedAccountRepository.find.mockResolvedValue([]);
 
       await expect(executeWithSender(WORKSPACE_MEMBER_ID)).rejects.toThrow(
-        `No connected account found for workspace member '${WORKSPACE_MEMBER_ID}'`,
+        `Workspace member '${WORKSPACE_MEMBER_ID}' has no connected account that can send email`,
       );
       expect(mockSendEmailTool.execute).not.toHaveBeenCalled();
     });
@@ -384,7 +478,7 @@ describe('SendEmailWorkflowAction', () => {
           currentStepId: 'step-1',
           steps: [
             {
-              ...buildSendEmailStep({ ...emailInput, body: 'hi' }),
+              ...buildSendEmailStep(emailInput),
               type: WorkflowActionType.DRAFT_EMAIL,
             } as WorkflowAction,
           ],

@@ -1,5 +1,10 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 
+import { SOURCE_LOCALE } from 'twenty-shared/translations';
+import { FieldActorSource } from 'twenty-shared/types';
+import { EMAIL_DOCUMENT_SCHEMA_VERSION } from 'twenty-shared/utils';
+
+import { I18nService } from 'src/engine/core-modules/i18n/i18n.service';
 import { EmailComposerService } from 'src/engine/core-modules/tool/tools/email-tool/email-composer.service';
 import { SendEmailTool } from 'src/engine/core-modules/tool/tools/email-tool/send-email-tool';
 import { type EmailToolInput } from 'src/engine/core-modules/tool/tools/email-tool/types/email-tool-input.type';
@@ -26,7 +31,7 @@ const sendResult = {
 const baseInput: EmailToolInput = {
   recipients: { to: 'test@example.com', cc: '', bcc: '' },
   subject: 'Subject',
-  body: '<p>body</p>',
+  body: { type: 'html', html: '<p>body</p>' },
   files: [],
 };
 
@@ -35,6 +40,7 @@ describe('SendEmailTool', () => {
   let mockComposeEmail: jest.Mock;
   let mockSendComposedEmail: jest.Mock;
   let mockPersistSentMessage: jest.Mock;
+  let mockGetI18nInstance: jest.Mock;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -45,6 +51,10 @@ describe('SendEmailTool', () => {
       messageId: 'message-record-id',
       messageThreadId: 'message-thread-record-id',
     });
+    mockGetI18nInstance = jest.fn(() => ({
+      _: (descriptor: { id: string; message?: string }) =>
+        descriptor.message ?? descriptor.id,
+    }));
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -59,6 +69,10 @@ describe('SendEmailTool', () => {
             sendComposedEmail: mockSendComposedEmail,
             persistSentMessage: mockPersistSentMessage,
           },
+        },
+        {
+          provide: I18nService,
+          useValue: { getI18nInstance: mockGetI18nInstance },
         },
       ],
     }).compile();
@@ -85,6 +99,67 @@ describe('SendEmailTool', () => {
     });
   });
 
+  it('composes the email from the document its explicit body describes', async () => {
+    mockComposeEmail.mockResolvedValue({
+      success: true,
+      data: buildComposedEmail(false),
+    });
+
+    await tool.execute(
+      { ...baseInput, body: { type: 'text', text: 'Hi Ada,\n\nThanks' } },
+      { workspaceId: 'workspace-1' },
+    );
+
+    expect(mockComposeEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parameters: expect.objectContaining({
+          body: {
+            type: 'doc',
+            attrs: { schemaVersion: EMAIL_DOCUMENT_SCHEMA_VERSION },
+            content: [
+              {
+                type: 'paragraph',
+                content: [
+                  { type: 'text', text: 'Hi Ada,' },
+                  { type: 'hardBreak' },
+                  { type: 'hardBreak' },
+                  { type: 'text', text: 'Thanks' },
+                ],
+              },
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
+  it('persists the sent message under the acting workflow or agent', async () => {
+    mockComposeEmail.mockResolvedValue({
+      success: true,
+      data: buildComposedEmail(true),
+    });
+
+    const actorMetadata = {
+      source: FieldActorSource.WORKFLOW,
+      name: 'Churn win-back',
+      workspaceMemberId: null,
+      context: { workflowId: 'workflow-id' },
+    };
+
+    await tool.execute(baseInput, {
+      workspaceId: 'workspace-1',
+      actorMetadata,
+    });
+
+    expect(mockPersistSentMessage).toHaveBeenCalledTimes(1);
+    expect(mockPersistSentMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 'workspace-1',
+        createdBy: actorMetadata,
+      }),
+    );
+  });
+
   it('returns the send identifiers without record ids when persistence is disabled', async () => {
     mockComposeEmail.mockResolvedValue({
       success: true,
@@ -102,6 +177,25 @@ describe('SendEmailTool', () => {
       threadExternalId: 'provider-thread-id',
       messageId: undefined,
       messageThreadId: undefined,
+    });
+  });
+
+  it('returns the composition error in the source locale', async () => {
+    mockComposeEmail.mockResolvedValue({
+      success: false,
+      error: { id: 'no-recipients', message: 'No recipients specified' },
+    });
+
+    const result = await tool.execute(baseInput, {
+      workspaceId: 'workspace-1',
+    });
+
+    expect(mockGetI18nInstance).toHaveBeenCalledWith(SOURCE_LOCALE);
+    expect(mockSendComposedEmail).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      success: false,
+      message: 'No recipients specified',
+      error: 'No recipients specified',
     });
   });
 

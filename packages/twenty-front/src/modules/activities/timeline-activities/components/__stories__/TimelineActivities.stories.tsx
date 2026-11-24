@@ -3,14 +3,14 @@ import { HttpResponse, graphql } from 'msw';
 
 import { TimelineCard } from '@/activities/timeline-activities/components/TimelineCard';
 import { TimelineActivityContext } from '@/activities/timeline-activities/contexts/TimelineActivityContext';
-import { CoreObjectNameSingular } from 'twenty-shared/types';
 import { LayoutRenderingProvider } from '@/ui/layout/contexts/LayoutRenderingContext';
+import { StandardObjectNameSingular } from 'twenty-shared/types';
 import { ComponentDecorator } from 'twenty-ui/testing';
 import { PageLayoutType } from '~/generated-metadata/graphql';
-import { ObjectMetadataItemsDecorator } from '~/testing/decorators/ObjectMetadataItemsDecorator';
-import { SnackBarDecorator } from '~/testing/decorators/SnackBarDecorator';
-import { mockedTimelineActivityRecords } from '~/testing/mock-data/generated/data/timelineActivities/mock-timelineActivities-data';
 import { MemoryRouterDecorator } from '~/testing/decorators/MemoryRouterDecorator';
+import { ObjectMetadataItemsDecorator } from '~/testing/decorators/ObjectMetadataItemsDecorator';
+import { ToastDecorator } from '~/testing/decorators/ToastDecorator';
+import { mockedTimelineActivityRecords } from '~/testing/mock-data/generated/data/timelineActivities/mock-timelineActivities-data';
 
 const meta: Meta<typeof TimelineCard> = {
   title: 'Modules/TimelineActivities/TimelineCard',
@@ -19,17 +19,16 @@ const meta: Meta<typeof TimelineCard> = {
     MemoryRouterDecorator,
     ComponentDecorator,
     ObjectMetadataItemsDecorator,
-    SnackBarDecorator,
+    ToastDecorator,
     (Story) => {
       return (
         <LayoutRenderingProvider
           value={{
             targetRecordIdentifier: {
               id: '1',
-              targetObjectNameSingular: CoreObjectNameSingular.Company,
+              targetObjectNameSingular: StandardObjectNameSingular.Company,
             },
             layoutType: PageLayoutType.RECORD_PAGE,
-            isInSidePanel: false,
           }}
         >
           <TimelineActivityContext.Provider value={{ recordId: 'mock-id' }}>

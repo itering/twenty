@@ -1,8 +1,10 @@
+import { type NavigationDrawerSubItemState } from '@/ui/navigation/navigation-drawer/types/NavigationDrawerSubItemState';
+import { NavigationMenuItemInsertionPreview } from '@/navigation-menu-item/edit/components/NavigationMenuItemInsertionPreview';
 import { styled } from '@linaria/react';
 import { type ReactNode, useContext } from 'react';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { themeCssVariables } from 'twenty-ui/theme';
 
-import { type NavigationSections } from '@/navigation-menu-item/common/constants/NavigationSections.constants';
+import { type NavigationSections } from '@/navigation-menu-item/common/constants/NavigationSections';
 import { NavigationDropTargetContext } from '@/navigation-menu-item/common/contexts/NavigationDropTargetContext';
 
 const StyledDropTarget = styled.div<{
@@ -45,29 +47,31 @@ const StyledDropTarget = styled.div<{
 `;
 
 type NavigationItemDropTargetProps = {
-  folderId: string | null;
+  parentId: string | null;
   index: number;
   sectionId: NavigationSections;
   children?: ReactNode;
   compact?: boolean;
   dropTargetIdOverride?: string;
   highlightPosition?: 'top' | 'bottom';
+  previewSubItemState?: NavigationDrawerSubItemState;
 };
 
 export const NavigationItemDropTarget = ({
-  folderId,
+  parentId,
   index,
   sectionId,
   children,
   compact = false,
   dropTargetIdOverride,
   highlightPosition = 'bottom',
+  previewSubItemState,
 }: NavigationItemDropTargetProps) => {
   const { activeDropTargetId, forbiddenDropTargetId } = useContext(
     NavigationDropTargetContext,
   );
   const dropTargetId =
-    dropTargetIdOverride ?? `${sectionId}-${folderId ?? 'orphan'}-${index}`;
+    dropTargetIdOverride ?? `${sectionId}-${parentId ?? 'orphan'}-${index}`;
   const isDragOver = activeDropTargetId === dropTargetId;
   const isDropForbidden = forbiddenDropTargetId === dropTargetId;
 
@@ -78,6 +82,12 @@ export const NavigationItemDropTarget = ({
       data-drag-over={isDragOver && !isDropForbidden ? 'true' : undefined}
       data-drop-forbidden={isDropForbidden ? 'true' : undefined}
     >
+      <NavigationMenuItemInsertionPreview
+        parentId={parentId}
+        index={index}
+        sectionId={sectionId}
+        subItemState={previewSubItemState}
+      />
       {children}
     </StyledDropTarget>
   );

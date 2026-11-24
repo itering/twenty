@@ -55,6 +55,7 @@ const mockObjectMetadataItem: EnrichedObjectMetadataItem = {
   isLabelSyncedWithName: true,
   isRemote: false,
   isSystem: false,
+  isAuditLogged: true,
   isUIEditable: true,
   isUICreatable: true,
   openRecordIn: ObjectOpenRecordIn.USER_CHOICE,

@@ -52,11 +52,11 @@ jobs:
           platforms: ${{ matrix.platform }}
           load: true
           tags: ${{ env.IMAGE }}:sha-${{ github.sha }}-${{ matrix.arch }}
-          build-args: APP_VERSION=2.30.0
+          build-args: APP_VERSION=2.62.0
           labels: |
             org.opencontainers.image.source=https://github.com/itering/twenty
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=2.30.0-itering
+            org.opencontainers.image.version=2.62.0-itering
           cache-from: type=gha,scope=crm-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=crm-${{ matrix.arch }}
       - name: Verify compiled workspace guard

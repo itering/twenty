@@ -15,11 +15,13 @@ import { MetadataUniversalFlatEntity } from 'src/engine/metadata-modules/flat-en
 import { getMetadataFlatEntityMapsKey } from 'src/engine/metadata-modules/flat-entity/utils/get-metadata-flat-entity-maps-key.util';
 import { getMetadataRelatedMetadataNamesForValidation } from 'src/engine/metadata-modules/flat-entity/utils/get-metadata-related-metadata-names-for-validation.util';
 import { getSubAllFlatEntityMapsByApplicationIdsOrThrow } from 'src/engine/metadata-modules/flat-entity/utils/get-sub-all-flat-entity-maps-by-application-ids-or-throw.util';
+import { restrictFieldMetadataOptionsToSliceOptionRowsThroughMutation } from 'src/engine/metadata-modules/flat-field-metadata-option/utils/restrict-field-metadata-options-to-slice-option-rows-through-mutation.util';
 import { MetadataSideEffectEngineService } from 'src/engine/metadata-modules/metadata-side-effect/services/metadata-side-effect-engine.service';
 import { WorkspaceCacheService } from 'src/engine/workspace-cache/services/workspace-cache.service';
 import { TWENTY_STANDARD_APPLICATION } from 'src/engine/workspace-manager/twenty-standard-application/constants/twenty-standard-applications';
 import { WORKSPACE_MIGRATION_ADDITIONAL_CACHE_DATA_MAPS_KEY } from 'src/engine/workspace-manager/workspace-migration/constant/workspace-migration-additional-cache-data-maps-key.constant';
 import { IdByUniversalIdentifierByMetadataName } from 'src/engine/workspace-manager/workspace-migration/services/utils/enrich-create-workspace-migration-action-with-ids.util';
+import { getTimelineActivityTypeTargetRelationApplicationIds } from 'src/engine/workspace-manager/workspace-migration/services/utils/get-timeline-activity-type-target-relation-application-ids.util';
 import { WorkspaceMigrationBuilderAdditionalCacheDataMaps } from 'src/engine/workspace-manager/workspace-migration/types/workspace-migration-builder-additional-cache-data-maps.type';
 import { FromToAllUniversalFlatEntityMaps } from 'src/engine/workspace-manager/workspace-migration/types/workspace-migration-orchestrator.type';
 import { computeUniversalFlatEntityMapsFromToThroughMutation } from 'src/engine/workspace-manager/workspace-migration/utils/compute-universal-flat-entity-maps-from-to-through-mutation.util';
@@ -123,8 +125,6 @@ export class WorkspaceMigrationFlatEntityMapsService {
         );
       }
 
-      // The record matrix is the canonical form; the from/to mutation helper still
-      // consumes arrays, so we flatten each bucket at this boundary only.
       const flatEntityToCreate = Object.values(
         flatEntityOperations.flatEntityToCreate,
       );
@@ -206,6 +206,10 @@ export class WorkspaceMigrationFlatEntityMapsService {
         fromAllFlatEntityMaps: allRelatedFlatEntityMaps,
       });
 
+    restrictFieldMetadataOptionsToSliceOptionRowsThroughMutation({
+      allFlatEntityMapsToMutate: dependencyAllFlatEntityMaps,
+    });
+
     const additionalCacheDataMaps =
       WORKSPACE_MIGRATION_ADDITIONAL_CACHE_DATA_MAPS_KEY.reduce<WorkspaceMigrationBuilderAdditionalCacheDataMaps>(
         (acc, additionalCacheDataMapsKey) => {
@@ -264,6 +268,16 @@ export class WorkspaceMigrationFlatEntityMapsService {
 
     if (!isBuildingTwentyStandardApplication) {
       applicationIds.add(twentyStandardApplicationId);
+    }
+
+    for (const targetRelationApplicationId of getTimelineActivityTypeTargetRelationApplicationIds(
+      {
+        timelineActivityTypeOperations:
+          allFlatEntityOperationRecordByMetadataName.timelineActivityType,
+        flatFieldMetadataMaps: allRelatedFlatEntityMaps.flatFieldMetadataMaps,
+      },
+    )) {
+      applicationIds.add(targetRelationApplicationId);
     }
 
     for (const metadataName of Object.keys(

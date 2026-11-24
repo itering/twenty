@@ -1,0 +1,336 @@
+import { useMutation } from '@apollo/client/react';
+import { styled } from '@linaria/react';
+import { useLingui } from '@lingui/react/macro';
+import { useState } from 'react';
+import { isDefined, isNonEmptyString } from 'twenty-shared/utils';
+import { useToast } from 'twenty-ui/components/feedback';
+import { Button } from 'twenty-ui/primitives/input';
+import { Dialog } from 'twenty-ui/primitives/surfaces';
+import { themeCssVariables } from 'twenty-ui/theme';
+
+import { billingState } from '@/client-config/states/billingState';
+import { getToastOptionsFromError } from '@/error-handler/utils/getToastOptionsFromError';
+import { useApolloAdminClient } from '@/settings/admin-panel/apollo/hooks/useApolloAdminClient';
+import { BILLING_ARRANGEMENT_COMMENT_MAX_LENGTH } from '@/settings/admin-panel/constants/BillingArrangementCommentMaxLength';
+import { BILLING_ARRANGEMENT_REASON_LABELS } from '@/settings/admin-panel/constants/BillingArrangementReasonLabels';
+import { CREATE_WORKSPACE_USAGE_LIMIT } from '@/settings/admin-panel/graphql/mutations/createWorkspaceUsageLimit';
+import { DELETE_WORKSPACE_USAGE_LIMIT } from '@/settings/admin-panel/graphql/mutations/deleteWorkspaceUsageLimit';
+import { WORKSPACE_BILLING_ARRANGEMENTS } from '@/settings/admin-panel/graphql/queries/workspaceBillingArrangements';
+import { WORKSPACE_USAGE_LIMITS } from '@/settings/admin-panel/graphql/queries/workspaceUsageLimits';
+import { type AdminUsageLimitRow } from '@/settings/admin-panel/types/AdminUsageLimitRow';
+import { getAdminUsageLimitPeriodLabel } from '@/settings/admin-panel/utils/getAdminUsageLimitPeriodLabel';
+import { getAdminUsageLimitScopeLabel } from '@/settings/admin-panel/utils/getAdminUsageLimitScopeLabel';
+import { getUsageLimitInputScale } from '@/settings/billing/utils/getUsageLimitInputScale';
+import { getUsageLimitUnitLabel } from '@/settings/billing/utils/getUsageLimitUnitLabel';
+import { parseUsageLimitValue } from '@/settings/billing/utils/parseUsageLimitValue';
+import { useUsageLimitFormatter } from '@/settings/billing/hooks/useUsageLimitFormatter';
+import { SettingsDatePickerInput } from '@/settings/components/SettingsDatePickerInput';
+import { Select } from '@/ui/input/components/Select';
+import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
+import { DialogInstance } from '@/ui/layout/dialog/components/DialogInstance';
+import { useDialog } from '@/ui/layout/dialog/hooks/useDialog';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import {
+  BillingArrangementLabel,
+  type DeleteWorkspaceUsageLimitMutation,
+} from '~/generated-admin/graphql';
+
+type SettingsAdminWorkspaceUsageLimitModalProps = {
+  dialogId: string;
+  workspaceId: string;
+  row: AdminUsageLimitRow;
+};
+
+const StyledFields = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[4]};
+`;
+
+const StyledActionSlot = styled.div`
+  flex: 1;
+`;
+
+export const SettingsAdminWorkspaceUsageLimitModal = ({
+  dialogId,
+  workspaceId,
+  row,
+}: SettingsAdminWorkspaceUsageLimitModalProps) => {
+  const { t } = useLingui();
+  const { formatLimitValue } = useUsageLimitFormatter();
+  const { closeDialog } = useDialog();
+  const { enqueueToast } = useToast();
+  const apolloAdminClient = useApolloAdminClient();
+  const billing = useAtomStateValue(billingState);
+
+  const isBillingEnabled = billing?.isBillingEnabled ?? false;
+  const inputScale = getUsageLimitInputScale(row.unit);
+
+  const [limitValue, setLimitValue] = useState(
+    isDefined(row.limitValue) ? String(row.limitValue / inputScale) : '',
+  );
+  const [burstValue, setBurstValue] = useState(
+    isDefined(row.burstValue) ? String(row.burstValue) : '',
+  );
+  const [endsAt, setEndsAt] = useState<Date | undefined>(undefined);
+  const [label, setLabel] = useState<BillingArrangementLabel>(
+    BillingArrangementLabel.OTHER,
+  );
+  const [comment, setComment] = useState<string | undefined>(undefined);
+
+  const mutationOptions = {
+    client: apolloAdminClient,
+    refetchQueries: [
+      { query: WORKSPACE_USAGE_LIMITS, variables: { workspaceId } },
+      { query: WORKSPACE_BILLING_ARRANGEMENTS, variables: { workspaceId } },
+    ],
+  };
+
+  const [createWorkspaceUsageLimit, { loading: isCreating }] = useMutation(
+    CREATE_WORKSPACE_USAGE_LIMIT,
+    mutationOptions,
+  );
+  const [deleteWorkspaceUsageLimit, { loading: isResetting }] =
+    useMutation<DeleteWorkspaceUsageLimitMutation>(
+      DELETE_WORKSPACE_USAGE_LIMIT,
+      mutationOptions,
+    );
+
+  const minimumLimitValue = row.limitKind === 'quota' ? 0 : 1;
+  const parsedLimitValue = parseUsageLimitValue({
+    value: limitValue,
+    min: minimumLimitValue,
+    scale: inputScale,
+  });
+  const hasBurstValue = isNonEmptyString(burstValue.trim());
+  const parsedBurstValue = hasBurstValue
+    ? parseUsageLimitValue({ value: burstValue, min: 1, scale: 1 })
+    : null;
+  const isBurstAllowed = row.limitKind === 'speed';
+  const isBusy = isCreating || isResetting;
+  const isEndsAtValid = !isDefined(endsAt) || endsAt.getTime() > Date.now();
+  const isValid =
+    isDefined(parsedLimitValue) &&
+    (!isBurstAllowed || !hasBurstValue || isDefined(parsedBurstValue)) &&
+    isEndsAtValid;
+
+  const unitLabel = getUsageLimitUnitLabel({
+    unit: row.unit,
+    operationType: row.operationType,
+  });
+  const scopeLabel = getAdminUsageLimitScopeLabel(row);
+  const grantedLimitText = isDefined(parsedLimitValue)
+    ? `${scopeLabel} · ${getAdminUsageLimitPeriodLabel(row)} · ${t(unitLabel.name)}: ${formatLimitValue(
+        {
+          value: parsedLimitValue,
+          unit: row.unit,
+          operationType: row.operationType,
+        },
+      )}`
+    : '';
+  const commentValue = comment ?? grantedLimitText;
+
+  const handleClose = () => {
+    closeDialog(dialogId);
+  };
+
+  const handleSubmit = async () => {
+    if (!isDefined(parsedLimitValue)) {
+      return;
+    }
+
+    const payload = {
+      resourceType: row.resourceType,
+      operationType: row.operationType,
+      spenderType: row.spenderType,
+      spenderId: null,
+      limitKind: row.limitKind,
+      periodCount: row.periodCount,
+      periodUnit: row.periodUnit,
+      unit: row.unit,
+      limitValue: parsedLimitValue,
+      burstValue: isBurstAllowed ? parsedBurstValue : null,
+    };
+
+    try {
+      await createWorkspaceUsageLimit({
+        variables: {
+          workspaceId,
+          payload,
+          endsAt: endsAt?.toISOString() ?? null,
+          label,
+          comment: commentValue.trim() || null,
+        },
+      });
+
+      enqueueToast({
+        status: 'success',
+        children: t`Limit saved for this workspace.`,
+      });
+      handleClose();
+    } catch (error) {
+      enqueueToast(getToastOptionsFromError({ error }));
+    }
+  };
+
+  const handleReset = async () => {
+    if (!isDefined(row.usageLimitId)) {
+      return;
+    }
+
+    try {
+      const { data } = await deleteWorkspaceUsageLimit({
+        variables: { workspaceId, usageLimitId: row.usageLimitId },
+      });
+
+      if (data?.deleteWorkspaceUsageLimit !== true) {
+        enqueueToast({
+          status: 'error',
+          children: t`This override no longer exists. Reload to see the current limit.`,
+        });
+        handleClose();
+
+        return;
+      }
+
+      enqueueToast({
+        status: 'success',
+        children: t`Limit reset to the default.`,
+      });
+      handleClose();
+    } catch (error) {
+      enqueueToast(getToastOptionsFromError({ error }));
+    }
+  };
+
+  const defaultText = isDefined(row.defaultValue)
+    ? formatLimitValue({
+        value: row.defaultValue,
+        unit: row.unit,
+        operationType: row.operationType,
+      })
+    : t`None`;
+
+  return (
+    <DialogInstance
+      dialogId={dialogId}
+      dismissible
+      onClose={handleClose}
+      renderInDocumentBody
+    >
+      {({ onKeyDown }) => (
+        <Dialog.Popup
+          onKeyDown={onKeyDown}
+          size="compact"
+          data-globally-prevent-click-outside
+        >
+          <Dialog.Header>
+            <Dialog.Title>{t`Set limit for this workspace`}</Dialog.Title>
+            <Dialog.Description>
+              {t`${scopeLabel} — the default for this workspace is ${defaultText}. Saving applies to this workspace only.`}
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Body>
+            <StyledFields>
+              <SettingsTextInput
+                instanceId={`${dialogId}-limit-value`}
+                label={t(unitLabel.name)}
+                type="number"
+                min={minimumLimitValue}
+                value={limitValue}
+                onChange={setLimitValue}
+                disabled={row.isOverridden}
+                autoFocusOnMount
+                fullWidth
+              />
+
+              {isBurstAllowed && (
+                <SettingsTextInput
+                  instanceId={`${dialogId}-burst-value`}
+                  label={t`Burst`}
+                  placeholder={t`Same as the limit`}
+                  type="number"
+                  min={1}
+                  value={burstValue}
+                  onChange={setBurstValue}
+                  disabled={row.isOverridden}
+                  fullWidth
+                />
+              )}
+
+              {isBillingEnabled && !row.isOverridden && (
+                <>
+                  <SettingsDatePickerInput
+                    instanceId={`${dialogId}-ends-at`}
+                    label={t`Ends (optional)`}
+                    placeholder={t`No end date`}
+                    value={endsAt}
+                    onChange={setEndsAt}
+                    isInModal
+                  />
+
+                  <Select
+                    dropdownId={`${dialogId}-label`}
+                    label={t`Reason`}
+                    value={label}
+                    options={Object.values(BillingArrangementLabel).map(
+                      (arrangementLabel) => ({
+                        value: arrangementLabel,
+                        label: t(
+                          BILLING_ARRANGEMENT_REASON_LABELS[arrangementLabel],
+                        ),
+                      }),
+                    )}
+                    onChange={setLabel}
+                    fullWidth
+                  />
+
+                  <SettingsTextInput
+                    instanceId={`${dialogId}-comment`}
+                    label={t`Comment`}
+                    placeholder={t`Compensation for the October outage`}
+                    value={commentValue}
+                    onChange={setComment}
+                    maxLength={BILLING_ARRANGEMENT_COMMENT_MAX_LENGTH}
+                    fullWidth
+                  />
+                </>
+              )}
+            </StyledFields>
+          </Dialog.Body>
+          <Dialog.Footer>
+            {row.isOverridden && (
+              <StyledActionSlot>
+                <Button
+                  onClick={handleReset}
+                  fullWidth
+                  disabled={isBusy}
+                  variant="outline"
+                  color="danger"
+                >{t`Reset`}</Button>
+              </StyledActionSlot>
+            )}
+            <StyledActionSlot>
+              <Button
+                onClick={handleClose}
+                fullWidth
+                variant="outline"
+              >{t`Cancel`}</Button>
+            </StyledActionSlot>
+            {!row.isOverridden && (
+              <StyledActionSlot>
+                <Button
+                  onClick={handleSubmit}
+                  fullWidth
+                  disabled={!isValid || isBusy}
+                  variant="solid"
+                  color="accent"
+                >{t`Save`}</Button>
+              </StyledActionSlot>
+            )}
+          </Dialog.Footer>
+        </Dialog.Popup>
+      )}
+    </DialogInstance>
+  );
+};

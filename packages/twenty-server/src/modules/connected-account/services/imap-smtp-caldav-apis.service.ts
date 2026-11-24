@@ -10,6 +10,7 @@ import { isDefined } from 'twenty-shared/utils';
 import { EntityManager, Repository } from 'typeorm';
 import { v4 } from 'uuid';
 
+import { ChannelVisibilityRuleSyncSchedulerService } from 'src/engine/permissions/channel-visibility/services/channel-visibility-rule-sync-scheduler.service';
 import { CreateCalendarChannelService } from 'src/engine/core-modules/auth/services/create-calendar-channel.service';
 import { CreateMessageChannelService } from 'src/engine/core-modules/auth/services/create-message-channel.service';
 import { NotFoundError } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
@@ -36,10 +37,11 @@ import {
 } from 'src/modules/messaging/message-import-manager/jobs/messaging-message-list-fetch.job';
 
 @Injectable()
-export class ImapSmtpCalDavAPIService {
-  private readonly logger = new Logger(ImapSmtpCalDavAPIService.name);
+export class ImapSmtpCalDavApiService {
+  private readonly logger = new Logger(ImapSmtpCalDavApiService.name);
 
   constructor(
+    private readonly channelVisibilityRuleSyncSchedulerService: ChannelVisibilityRuleSyncSchedulerService,
     @InjectRepository(CalendarChannelEntity)
     private readonly calendarChannelRepository: Repository<CalendarChannelEntity>,
     @InjectRepository(ConnectedAccountEntity)
@@ -65,9 +67,6 @@ export class ImapSmtpCalDavAPIService {
     handle: string;
     userWorkspaceId: string;
     workspaceId: string;
-    // Caller (resolver) has already validated the input through
-    // `ImapSmtpCaldavService.validateAndTestConnectionParameters`, which
-    // produces fully plaintext passwords ready for re-encryption.
     connectionParameters: PlaintextImapSmtpCaldavParams;
     existingAccount?: ConnectedAccountEntity | null;
   }): Promise<string> {
@@ -135,6 +134,7 @@ export class ImapSmtpCalDavAPIService {
           userWorkspaceId,
           workspaceId,
           authFailedAt: null,
+          authFailedReason: null,
           archivedAt: null,
         });
 
@@ -184,6 +184,10 @@ export class ImapSmtpCalDavAPIService {
       },
     );
 
+    await this.channelVisibilityRuleSyncSchedulerService.scheduleSyncIfEnabled(
+      workspaceId,
+    );
+
     if (isDefined(existingAccount)) {
       await this.accountsToReconnectService.removeAccountToReconnect(
         userWorkspace.userId,
@@ -229,6 +233,10 @@ export class ImapSmtpCalDavAPIService {
       await this.messageQueueService.add<MessagingMessageListFetchJobData>(
         MessagingMessageListFetchJob.name,
         { workspaceId, messageChannelId: existingMessageChannel.id },
+        {
+          workspaceId,
+          isWorkspaceJob: true,
+        },
       );
     }
 
@@ -246,6 +254,10 @@ export class ImapSmtpCalDavAPIService {
       await this.calendarQueueService.add<CalendarEventListFetchJobData>(
         CalendarEventListFetchJob.name,
         { workspaceId, calendarChannelId: existingCalendarChannel.id },
+        {
+          workspaceId,
+          isWorkspaceJob: true,
+        },
       );
     }
 

@@ -1,4 +1,6 @@
 import { formatRecordReference } from '@/ai/utils/format-record-reference.util';
+import { formatSkillReference } from '@/ai/utils/format-skill-reference.util';
+import { isDefined } from '@/utils/validation';
 
 import { parseTipTapJsonDocument } from './parse-tiptap-json-document';
 import { type TipTapDocument } from './tiptap-document';
@@ -30,7 +32,7 @@ const MARKDOWN_DESTINATION_CHARACTER_ESCAPES: Readonly<Record<string, string>> =
 const escapeMarkdownDestination = (destination: string): string =>
   destination.replace(/[\\()<>\s]/g, (character) =>
     character in MARKDOWN_DESTINATION_CHARACTER_ESCAPES
-      ? MARKDOWN_DESTINATION_CHARACTER_ESCAPES[character]
+      ? (MARKDOWN_DESTINATION_CHARACTER_ESCAPES[character] ?? character)
       : encodeURIComponent(character),
   );
 
@@ -56,6 +58,55 @@ const applyMark = (text: string, mark: TipTapMark): string => {
   }
 };
 
+const buildBacktickFence = ({
+  code,
+  minimumLength,
+}: {
+  code: string;
+  minimumLength: number;
+}): string =>
+  '`'.repeat(
+    Math.max(
+      minimumLength,
+      ...(code.match(/`+/g) ?? []).map((backticks) => backticks.length + 1),
+    ),
+  );
+
+const renderInlineCode = (code: string): string => {
+  const fence = buildBacktickFence({ code, minimumLength: 1 });
+  const padding = code.startsWith('`') || code.endsWith('`') ? ' ' : '';
+
+  return `${fence}${padding}${code}${padding}${fence}`;
+};
+
+const renderCodeBlock = (node: TipTapNode): string => {
+  const code = (node.content ?? []).map((child) => child.text ?? '').join('');
+  const fence = buildBacktickFence({ code, minimumLength: 3 });
+  const language =
+    typeof node.attrs?.language === 'string' ? node.attrs.language : '';
+
+  return `${fence}${language}\n${code}\n${fence}\n\n`;
+};
+
+const renderTableRow = (row: TipTapNode): string =>
+  `| ${(row.content ?? [])
+    .map((cell) => renderChildren(cell).trim().replace(/\n+/g, ' '))
+    .join(' | ')} |`;
+
+const renderTable = (node: TipTapNode): string => {
+  const [headerRow, ...bodyRows] = node.content ?? [];
+
+  if (!isDefined(headerRow)) {
+    return '';
+  }
+
+  const separatorRow = `| ${(headerRow.content ?? [])
+    .map(() => '---')
+    .join(' | ')} |`;
+
+  return `${[renderTableRow(headerRow), separatorRow, ...bodyRows.map(renderTableRow)].join('\n')}\n\n`;
+};
+
 const renderMention = (node: TipTapNode): string => {
   const objectName = node.attrs?.objectNameSingular;
   const recordId = node.attrs?.recordId;
@@ -76,7 +127,22 @@ const renderMention = (node: TipTapNode): string => {
   return '';
 };
 
-const renderListItem = (item: TipTapNode, marker: string): string => {
+const renderSkillTag = (node: TipTapNode): string => {
+  const skillId = node.attrs?.skillId;
+  const label = node.attrs?.label;
+
+  if (typeof skillId === 'string' && typeof label === 'string') {
+    return formatSkillReference({ skillId, label });
+  }
+
+  return typeof label === 'string' ? label : '';
+};
+
+const renderListItem = (
+  item: TipTapNode,
+  marker: string,
+  checkbox = '',
+): string => {
   const [firstLine = '', ...continuationLines] = renderChildren(item)
     .trim()
     .split('\n');
@@ -85,7 +151,7 @@ const renderListItem = (item: TipTapNode, marker: string): string => {
     .map((line) => (line === '' ? '' : `${indentation}${line}`))
     .join('\n');
 
-  return `${marker}${firstLine}${
+  return `${marker}${checkbox}${firstLine}${
     indentedContinuation === '' ? '' : `\n${indentedContinuation}`
   }\n`;
 };
@@ -93,6 +159,12 @@ const renderListItem = (item: TipTapNode, marker: string): string => {
 const renderTipTapNodeToMarkdown = (node: TipTapNode): string => {
   switch (node.type) {
     case TIPTAP_NODE_TYPES.TEXT:
+      if (
+        (node.marks ?? []).some((mark) => mark.type === TIPTAP_MARK_TYPES.CODE)
+      ) {
+        return renderInlineCode(node.text ?? '');
+      }
+
       return [...(node.marks ?? [])]
         .sort(
           (firstMark, secondMark) =>
@@ -111,6 +183,8 @@ const renderTipTapNodeToMarkdown = (node: TipTapNode): string => {
         : '';
     case TIPTAP_NODE_TYPES.MENTION_TAG:
       return renderMention(node);
+    case TIPTAP_NODE_TYPES.SKILL_TAG:
+      return renderSkillTag(node);
     case TIPTAP_NODE_TYPES.HEADING: {
       const level =
         typeof node.attrs?.level === 'number' ? node.attrs.level : 1;
@@ -123,6 +197,16 @@ const renderTipTapNodeToMarkdown = (node: TipTapNode): string => {
       return `${(node.content ?? [])
         .map((item) => renderListItem(item, '- '))
         .join('')}\n`;
+    case TIPTAP_NODE_TYPES.TASK_LIST:
+      return `${(node.content ?? [])
+        .map((item) =>
+          renderListItem(
+            item,
+            '- ',
+            item.attrs?.checked === true ? '[x] ' : '[ ] ',
+          ),
+        )
+        .join('')}\n`;
     case TIPTAP_NODE_TYPES.ORDERED_LIST: {
       const start =
         typeof node.attrs?.start === 'number' ? node.attrs.start : 1;
@@ -131,6 +215,12 @@ const renderTipTapNodeToMarkdown = (node: TipTapNode): string => {
         .map((item, index) => renderListItem(item, `${start + index}. `))
         .join('')}\n`;
     }
+    case TIPTAP_NODE_TYPES.BLOCKQUOTE:
+      return `${renderChildren(node)
+        .trim()
+        .split('\n')
+        .map((line) => (line === '' ? '>' : `> ${line}`))
+        .join('\n')}\n\n`;
     case TIPTAP_NODE_TYPES.IMAGE: {
       const alt = typeof node.attrs?.alt === 'string' ? node.attrs.alt : '';
       const src = typeof node.attrs?.src === 'string' ? node.attrs.src : '';
@@ -153,6 +243,18 @@ const renderTipTapNodeToMarkdown = (node: TipTapNode): string => {
       return typeof node.attrs?.html === 'string' ? node.attrs.html : '';
     case TIPTAP_NODE_TYPES.DIVIDER:
       return '---\n\n';
+    case TIPTAP_NODE_TYPES.CODE_BLOCK:
+      return renderCodeBlock(node);
+    case TIPTAP_NODE_TYPES.TABLE:
+      return renderTable(node);
+    case TIPTAP_NODE_TYPES.FILE: {
+      const name = typeof node.attrs?.name === 'string' ? node.attrs.name : '';
+      const url = typeof node.attrs?.url === 'string' ? node.attrs.url : '';
+
+      return url === ''
+        ? ''
+        : `[${escapeMarkdownText(name === '' ? url : name)}](${escapeMarkdownDestination(url)})\n\n`;
+    }
     default:
       return renderChildren(node);
   }

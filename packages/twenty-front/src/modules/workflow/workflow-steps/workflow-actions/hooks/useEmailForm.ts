@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { serializePlainTextAsAdvancedTextEditorDocument } from '@/advanced-text-editor/utils/serializePlainTextAsAdvancedTextEditorDocument';
 import { type EmailFormData } from '@/workflow/types/EmailFormData';
 import { type WorkflowEmailAction } from '@/workflow/types/WorkflowEmailAction';
 import { type JsonValue } from 'type-fest';
@@ -20,13 +21,16 @@ export const useEmailForm = ({
 
     return {
       connectedAccountId: action.settings.input.connectedAccountId,
+      fromHandle: action.settings.input.fromHandle ?? '',
       recipients: {
         to: inputRecipients?.to ?? '',
         cc: inputRecipients?.cc ?? '',
         bcc: inputRecipients?.bcc ?? '',
       },
       subject: action.settings.input.subject ?? '',
-      body: action.settings.input.body ?? '',
+      body:
+        action.settings.input.body ??
+        serializePlainTextAsAdvancedTextEditorDocument(''),
       files: action.settings.input.files ?? [],
       inReplyTo: action.settings.input.inReplyTo ?? '',
     };
@@ -43,6 +47,7 @@ export const useEmailForm = ({
         ...action.settings,
         input: {
           connectedAccountId: formData.connectedAccountId,
+          fromHandle: formData.fromHandle,
           recipients: formData.recipients,
           subject: formData.subject,
           body: formData.body,
@@ -53,22 +58,26 @@ export const useEmailForm = ({
     });
   }, 1_000);
 
+  const applyFormData = (newFormData: EmailFormData) => {
+    setFormData(newFormData);
+    saveAction(newFormData);
+  };
+
+  const handleFieldsChange = (updatedFields: Partial<EmailFormData>) => {
+    applyFormData({ ...formData, ...updatedFields });
+  };
+
   const handleFieldChange = (
     fieldName: keyof EmailFormData,
     updatedValue: JsonValue,
   ) => {
-    const newFormData: EmailFormData = {
-      ...formData,
-      [fieldName]: updatedValue,
-    };
-
-    setFormData(newFormData);
-    saveAction(newFormData);
+    applyFormData({ ...formData, [fieldName]: updatedValue });
   };
 
   return {
     formData,
     handleFieldChange,
+    handleFieldsChange,
     saveAction,
   };
 };

@@ -16,7 +16,6 @@ import { UserSessionRevokedReason } from 'src/engine/core-modules/user-session/t
 import { hashUserSessionToken } from 'src/engine/core-modules/user-session/utils/hash-user-session-token.util';
 
 import { ALLOWED_ORIGIN } from 'test/integration/graphql/suites/auth/user-sessions/constants/session-origins.constants';
-import { setupDatabaseConfigOverrideForSuite } from 'test/integration/graphql/suites/auth/user-sessions/utils/setup-database-config-override.util';
 
 type UserSessionApiEntry = {
   id: string;
@@ -26,8 +25,6 @@ type UserSessionApiEntry = {
 };
 
 describe('successful user sessions API (integration)', () => {
-  setupDatabaseConfigOverrideForSuite('AUTH_COOKIE_SESSIONS_ENABLED', true);
-
   let currentSessionCookieHeader: string;
   let otherSessionToken: string;
 
@@ -46,8 +43,7 @@ describe('successful user sessions API (integration)', () => {
   };
 
   beforeAll(async () => {
-    // Two devices: the "other" one signs in first so the second sign-in does
-    // not supersede it (no cookie presented on either exchange).
+    // The other device signs in first so the second cookie-less sign-in does not supersede it.
     const otherDeviceResponse = await signInWithCookieCapture({
       originHeader: ALLOWED_ORIGIN,
     });
@@ -103,7 +99,9 @@ describe('successful user sessions API (integration)', () => {
     ).findOneBy({ id: otherSessionRow.id });
 
     expect(revokedRow?.revokedAt).not.toBeNull();
-    expect(revokedRow?.revokedReason).toBe(UserSessionRevokedReason.UserRevoked);
+    expect(revokedRow?.revokedReason).toBe(
+      UserSessionRevokedReason.UserRevoked,
+    );
 
     const sessions = await fetchSessions();
 
@@ -113,7 +111,6 @@ describe('successful user sessions API (integration)', () => {
   });
 
   it('should revoke every other session but keep the presented one alive', async () => {
-    // A fresh sign-in guarantees at least one other active session to revoke.
     await signInWithCookieCapture({ originHeader: ALLOWED_ORIGIN });
 
     const response = await postMetadataOperationWithHeaders(
@@ -125,9 +122,9 @@ describe('successful user sessions API (integration)', () => {
     );
 
     expect(response.body.errors).toBeUndefined();
-    expect(response.body.data.revokeAllOtherUserSessions).toBeGreaterThanOrEqual(
-      1,
-    );
+    expect(
+      response.body.data.revokeAllOtherUserSessions,
+    ).toBeGreaterThanOrEqual(1);
 
     const sessions = await fetchSessions();
 

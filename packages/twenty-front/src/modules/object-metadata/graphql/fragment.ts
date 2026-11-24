@@ -14,6 +14,7 @@ export const OBJECT_METADATA_FRAGMENT = gql`
     isRemote
     isActive
     isSystem
+    isAuditLogged
     isUIEditable
     isUICreatable
     createdAt
@@ -26,6 +27,7 @@ export const OBJECT_METADATA_FRAGMENT = gql`
     isSearchable
     openRecordIn
     duplicateCriteria
+    disabledObjectPermissionActions
     searchFieldMetadataList {
       id
       fieldMetadataId
@@ -42,7 +44,8 @@ export const OBJECT_METADATA_FRAGMENT = gql`
       indexWhereClause
       indexType
       isUnique
-      isCustom
+      applicationId
+      isSystemSideEffect
       indexFieldMetadataList {
         id
         fieldMetadataId
@@ -63,8 +66,10 @@ export const OBJECT_METADATA_FRAGMENT = gql`
       isActive
       isSystem
       isUIEditable
+      isSystemSideEffect
       isNullable
       isUnique
+      isSearchable
       createdAt
       updatedAt
       defaultValue

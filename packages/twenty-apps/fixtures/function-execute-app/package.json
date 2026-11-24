@@ -3,15 +3,15 @@
   "version": "0.1.0",
   "license": "MIT",
   "engines": {
-    "node": "^24.5.0",
+    "node": "^26.5.1",
     "npm": "please-use-yarn",
     "yarn": ">=4.0.2"
   },
   "packageManager": "yarn@4.9.2",
   "scripts": {
-    "dev": "twenty dev",
-    "exec": "twenty dev:fn-exec",
-    "uninstall": "twenty app:uninstall",
+    "dev": "node ../../../twenty-cli/dist/cli.cjs app dev",
+    "exec": "node ../../../twenty-cli/dist/cli.cjs app exec",
+    "uninstall": "node ../../../twenty-cli/dist/cli.cjs app uninstall",
     "lint": "oxlint -c .oxlintrc.json .",
     "lint:fix": "oxlint --fix -c .oxlintrc.json ."
   },

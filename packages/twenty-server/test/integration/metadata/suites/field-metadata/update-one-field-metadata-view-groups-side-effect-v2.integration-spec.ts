@@ -7,12 +7,12 @@ import { getMockCreateObjectInput } from 'test/integration/metadata/suites/objec
 import { updateOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/update-one-object-metadata.util';
 import { findViewGroups } from 'test/integration/metadata/suites/view-group/utils/find-view-groups.util';
 import { createOneView } from 'test/integration/metadata/suites/view/utils/create-one-view.util';
-import { FieldMetadataType, ViewType } from 'twenty-shared/types';
-
 import {
   type FieldMetadataComplexOption,
   type FieldMetadataDefaultOption,
-} from 'src/engine/metadata-modules/field-metadata/dtos/options.input';
+  FieldMetadataType,
+  ViewType,
+} from 'twenty-shared/types';
 
 type Option = FieldMetadataDefaultOption | FieldMetadataComplexOption;
 
@@ -318,6 +318,76 @@ describe('update-one-field-metadata-view-groups-side-effect-v2', () => {
       ].sort();
 
       expect(actualFieldValues).toEqual(expectedFieldValues);
+    });
+
+    it('removes the view group of a deactivated option, on new views too, and restores it on reactivation', async () => {
+      const { objectMetadataId, fieldMetadataId, fieldOptions, viewId } =
+        await createObjectWithSelectFieldAndView(generateOptions(3));
+      const findGroupValues = async (groupedViewId: string) => {
+        const {
+          data: { getViewGroups },
+        } = await findViewGroups({
+          viewId: groupedViewId,
+          gqlFields: 'id fieldValue',
+          expectToFail: false,
+        });
+
+        return getViewGroups.map((viewGroup) => viewGroup.fieldValue).sort();
+      };
+      const updateOptions = (options: Option[]) =>
+        updateOneFieldMetadata({
+          expectToFail: false,
+          input: { idToUpdate: fieldMetadataId, updatePayload: { options } },
+          gqlFields: 'id options',
+        });
+
+      await updateOptions(
+        fieldOptions.map((option) =>
+          option.value === 'OPTION_1' ? { ...option, isActive: false } : option,
+        ),
+      );
+
+      expect(await findGroupValues(viewId)).toEqual([
+        '',
+        'OPTION_0',
+        'OPTION_2',
+      ]);
+
+      const {
+        data: { createView: secondView },
+      } = await createOneView({
+        input: {
+          id: faker.string.uuid(),
+          icon: 'IconTable',
+          name: 'Second Test View',
+          objectMetadataId,
+          mainGroupByFieldMetadataId: fieldMetadataId,
+          type: ViewType.TABLE,
+        },
+        expectToFail: false,
+        gqlFields: 'id',
+      });
+
+      expect(await findGroupValues(secondView.id)).toEqual([
+        '',
+        'OPTION_0',
+        'OPTION_2',
+      ]);
+
+      await updateOptions(fieldOptions);
+
+      expect(await findGroupValues(viewId)).toEqual([
+        '',
+        'OPTION_0',
+        'OPTION_1',
+        'OPTION_2',
+      ]);
+      expect(await findGroupValues(secondView.id)).toEqual([
+        '',
+        'OPTION_0',
+        'OPTION_1',
+        'OPTION_2',
+      ]);
     });
   });
 });

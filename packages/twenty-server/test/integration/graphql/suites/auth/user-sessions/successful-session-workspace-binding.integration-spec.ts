@@ -8,7 +8,6 @@ import {
 import { currentUserWorkspaceContextQueryFactory } from 'test/integration/graphql/suites/auth/user-sessions/utils/user-session-operations.util';
 
 import { ALLOWED_ORIGIN } from 'test/integration/graphql/suites/auth/user-sessions/constants/session-origins.constants';
-import { setupDatabaseConfigOverrideForSuite } from 'test/integration/graphql/suites/auth/user-sessions/utils/setup-database-config-override.util';
 
 import {
   SEED_APPLE_WORKSPACE_ID,
@@ -18,14 +17,9 @@ import { USER_WORKSPACE_DATA_SEED_IDS } from 'src/engine/workspace-manager/dev-s
 import { UserSessionEntity } from 'src/engine/core-modules/user-session/user-session.entity';
 import { hashUserSessionToken } from 'src/engine/core-modules/user-session/utils/hash-user-session-token.util';
 
-// Tim is seeded in both the apple and yc workspaces, which is what makes this
-// provable: same user, same credentials, two sessions, and each cookie can
-// only ever reach the workspace its exchange selected. No request-side input
-// (header, variable, origin) lets a session pivot to another workspace; the
-// context is rebuilt from the session row alone.
+// Tim is seeded in both apple and yc, so each session must reach only the workspace its exchange selected,
+// whatever the request sends: the context is rebuilt from the session row alone.
 describe('successful session workspace binding (integration)', () => {
-  setupDatabaseConfigOverrideForSuite('AUTH_COOKIE_SESSIONS_ENABLED', true);
-
   let appleSessionToken: string;
   let ycSessionToken: string;
   let appleSessionCookieHeader: string;
